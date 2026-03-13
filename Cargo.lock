@@ -2390,6 +2390,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "fenrir-error-management"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fenrir-ai",
+ "fenrir-core",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "fenrir-i18n"
 version = "0.1.0"
 dependencies = [

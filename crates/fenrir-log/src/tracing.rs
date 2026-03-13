@@ -67,15 +67,15 @@ fn create_file_layer(
     std::fs::create_dir_all(&config.directory)?;
     
     let log_file = PathBuf::from(&config.filename);
-    let appender = LogRollerBuilder::new(&config.directory, &log_file)
+    let mut builder = LogRollerBuilder::new(&config.directory, &log_file)
         .rotation(Rotation::SizeBased(RotationSize::Bytes(config.max_size_bytes)))
-        .max_keep_files(config.max_files.try_into().unwrap())
-        .compression(if config.compress {
-            Compression::Gzip
-        } else {
-            Compression::None
-        })
-        .build()?;
+        .max_keep_files(config.max_files.try_into().unwrap());
+    
+    if config.compress {
+        builder = builder.compression(Compression::Gzip);
+    }
+    
+    let appender = builder.build()?;
     
     let (non_blocking, guard) = tracing_appender::non_blocking(appender);
     

@@ -44,7 +44,7 @@ impl PerfLogger {
     pub fn log(&self, target: &str, message: impl std::fmt::Display) {
         #[cfg(feature = "perf")]
         {
-            use inqjet::Level;
+            use tracing::Level;
             
             let level = match self.config.level {
                 LogLevel::Trace => Level::Trace,
@@ -66,7 +66,7 @@ impl PerfLogger {
     
     #[cfg(feature = "perf")]
     fn should_log(&self, level: inqjet::Level) -> bool {
-        use inqjet::Level;
+        use tracing::Level;
         
         let config_level = match self.config.level {
             LogLevel::Trace => Level::Trace,
@@ -90,7 +90,8 @@ impl PerfLogger {
         
         #[cfg(feature = "perf")]
         {
-            use inqjet::{Level, LevelFilter};
+            use inqjet::{LevelFilter};
+            use tracing::Level;
             
             let filter = match level {
                 LogLevel::Trace => LevelFilter::Trace,

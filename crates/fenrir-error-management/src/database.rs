@@ -2,7 +2,7 @@ use rusqlite::{Connection, params, OptionalExtension};
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use log::{info, warn, error};
+use log::info;
 
 use crate::models::{ErrorRecord, ErrorCategory, ErrorStatistics, HelpSuggestion};
 use crate::error::ErrorManagementError;

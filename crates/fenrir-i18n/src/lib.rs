@@ -130,7 +130,7 @@ impl std::fmt::Display for Language {
 
 /// Main i18n manager that holds all translations.
 pub struct I18nManager {
-    bundles: HashMap<LanguageIdentifier, FluentBundle<FluentResource>>,
+    bundles: HashMap<LanguageIdentifier, Arc<FluentBundle<FluentResource>>>,
     current_language: Language,
 }
 

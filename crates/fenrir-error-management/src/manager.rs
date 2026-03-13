@@ -143,7 +143,7 @@ impl ErrorManager {
     }
 
     /// Akzeptiert einen AI-Vorschlag als offizielle Hilfe
-    pub async fn accept_help_suggestion(&self, suggestion_id: i64) -> ErrorManagementResult<()> {
+    pub async fn accept_help_suggestion(&self, _suggestion_id: i64) -> ErrorManagementResult<()> {
         // In einer realen Implementierung würde dies den Vorschlag als akzeptiert markieren
         // und möglicherweise als offizielle Hilfe setzen
         warn!("accept_help_suggestion not fully implemented yet");

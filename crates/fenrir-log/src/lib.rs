@@ -127,7 +127,7 @@ impl FenrirLogger {
         message: &str,
     ) {
         if let Some(ref perf_logger) = self.perf_logger {
-            use inqjet::Level;
+            use tracing::Level;
             
             let level = match self.config.perf_config.level {
                 config::LogLevel::Trace => Level::Trace,

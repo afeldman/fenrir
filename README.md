@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="cloudlogin" width="320">
+</p>
+
 # Fenrir Browser
 
 **A privacy-focused, EU-first web browser built on Servo with AI integration**
@@ -211,6 +215,19 @@ For issues, questions, or discussions:
 - Check existing issues on GitHub
 - Create a new issue for bugs
 - Join our community discussions
+
+---
+
+## 📞 Support
+
+- **Documentation**: [docs.fenrir.ai](https://github.com/afeldman/fenrir)
+- **Issues**: [GitHub Issues](https://github.com/afeldman/fenrir/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/afeldman/fenrir/discussions)
+- **Email**: anton.feldmann@gmail.com
+
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=afeldman/fenrir&type=Date)](https://star-history.com/#afeldman/fenrir&Date)
 
 ---
 

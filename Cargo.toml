@@ -11,6 +11,13 @@ members = [
     "crates/fenrir-config",
     "crates/fenrir-log",
     "crates/fenrir-error-management",
+    "crates/fenrir-i18n",
+    "crates/fenrir-metrics",
+    "crates/fenrir-rendering",
+    "crates/fenrir-secure",
+    "crates/fenrir-sandbox",
+    "crates/fenrir-api",
+    "crates/fenrir-ui",
 ]
 
 [workspace.package]
@@ -29,6 +36,15 @@ fenrir-mcp = { path = "crates/fenrir-mcp" }
 fenrir-network = { path = "crates/fenrir-network" }
 fenrir-ai = { path = "crates/fenrir-ai" }
 fenrir-config = { path = "crates/fenrir-config" }
+fenrir-log = { path = "crates/fenrir-log" }
+fenrir-error-management = { path = "crates/fenrir-error-management" }
+fenrir-i18n = { path = "crates/fenrir-i18n" }
+fenrir-metrics = { path = "crates/fenrir-metrics" }
+fenrir-rendering = { path = "crates/fenrir-rendering" }
+fenrir-secure = { path = "crates/fenrir-secure" }
+fenrir-sandbox = { path = "crates/fenrir-sandbox" }
+fenrir-api = { path = "crates/fenrir-api" }
+fenrir-ui = { path = "crates/fenrir-ui" }
 
 # Async
 tokio = { version = "1", features = ["full"] }
@@ -47,6 +63,7 @@ once_cell = "1.20"
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = "0.4"
 
 # Zeroize for secrets
 zeroize = { version = "1", features = ["derive"] }

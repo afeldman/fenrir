@@ -47,11 +47,11 @@ impl PerfLogger {
             use tracing::Level;
             
             let level = match self.config.level {
-                LogLevel::Trace => Level::Trace,
-                LogLevel::Debug => Level::Debug,
-                LogLevel::Info => Level::Info,
-                LogLevel::Warn => Level::Warn,
-                LogLevel::Error => Level::Error,
+                LogLevel::Trace => Level::TRACE,
+                LogLevel::Debug => Level::DEBUG,
+                LogLevel::Info => Level::INFO,
+                LogLevel::Warn => Level::WARN,
+                LogLevel::Error => Level::ERROR,
             };
             
             // Check if message should be logged based on level
@@ -65,15 +65,15 @@ impl PerfLogger {
     }
     
     #[cfg(feature = "perf")]
-    fn should_log(&self, level: inqjet::Level) -> bool {
+    fn should_log(&self, level: tracing::Level) -> bool {
         use tracing::Level;
         
         let config_level = match self.config.level {
-            LogLevel::Trace => Level::Trace,
-            LogLevel::Debug => Level::Debug,
-            LogLevel::Info => Level::Info,
-            LogLevel::Warn => Level::Warn,
-            LogLevel::Error => Level::Error,
+            LogLevel::Trace => Level::TRACE,
+            LogLevel::Debug => Level::DEBUG,
+            LogLevel::Info => Level::INFO,
+            LogLevel::Warn => Level::WARN,
+            LogLevel::Error => Level::ERROR,
         };
         
         level <= config_level
@@ -90,8 +90,7 @@ impl PerfLogger {
         
         #[cfg(feature = "perf")]
         {
-            use inqjet::{LevelFilter};
-            use tracing::Level;
+            use inqjet::LevelFilter;
             
             let filter = match level {
                 LogLevel::Trace => LevelFilter::Trace,
@@ -146,9 +145,3 @@ fn init_inqjet(_config: &PerfConfig) -> Result<InqJetGuard, LogError> {
 /// This is a re-export of inqjet's Pod trait when the perf feature is enabled.
 #[cfg(feature = "perf")]
 pub use inqjet::Pod;
-
-/// Derive macro for Pod trait.
-///
-/// This is a re-export of inqjet's Pod derive macro when the perf feature is enabled.
-#[cfg(feature = "perf")]
-pub use inqjet_macros::Pod;

@@ -1,0 +1,29 @@
+[package]
+name = "fenrir-api"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Fenrir Browser Contributors"]
+description = "Public API definitions for Fenrir browser - types and traits only, no implementations"
+repository = "https://github.com/fenrir-browser/fenrir"
+readme = "README.md"
+
+# This crate contains ONLY type definitions and traits
+# NO implementations allowed!
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+
+# Only standard library dependencies beyond this point
+# NO Tauri, NO Servo, NO other Fenrir crates!
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[features]
+default = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

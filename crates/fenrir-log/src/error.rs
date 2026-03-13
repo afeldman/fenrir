@@ -22,7 +22,7 @@ pub enum LogError {
     /// Logroller initialization error.
     #[cfg(feature = "rolling")]
     #[error("Logroller initialization error: {0}")]
-    LogrollerInit(#[from] logroller::Error),
+    LogrollerInit(String),
     
     /// Invalid configuration.
     #[error("Invalid configuration: {0}")]

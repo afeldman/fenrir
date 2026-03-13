@@ -1,5 +1,5 @@
 [package]
-name = "fenrir-servo"
+name = "fenrir-secure"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,21 +7,20 @@ authors.workspace = true
 
 [dependencies]
 fenrir-core = { workspace = true }
-fenrir-network = { workspace = true }
-fenrir-rendering = { workspace = true }
-fenrir-metrics = { workspace = true }
+fenrir-servo = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 url = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = "0.12"
 
-# Servo embedding API (via workspace, git-Dep)
+# Servo dependencies
 servo = { workspace = true }
-surfman = { version = "0.11.0", features = ["chains"] }
+embedder_traits = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3.10"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-paint_api = { workspace = true }
-embedder_traits = { workspace = true }
-dpi = "0.1"
-url = { workspace = true }

@@ -3,7 +3,7 @@
 //! Uses fenrir-log crate for hybrid logging architecture.
 
 use std::path::PathBuf;
-use fenrir_log::{FenrirLogger, LogConfig};
+use fenrir_log::FenrirLogger;
 
 /// Guard muss in main() gehalten werden (sonst flush verloren).
 pub struct LogGuard(pub FenrirLogger);
@@ -52,16 +52,9 @@ pub fn init() -> anyhow::Result<LogGuard> {
 pub fn perf_log(target: &str, message: impl std::fmt::Display) {
     // Diese Funktion kann von überall aufgerufen werden
     // Sie verwendet den globalen Logger oder falls nicht verfügbar, tracing
-    if let Ok(guard) = std::panic::catch_unwind(|| {
-        // Versuche, den globalen Logger zu verwenden
-        // In einer realen Implementierung würden wir einen globalen Logger haben
-        tracing::debug!(target: target, "[PERF] {}", message);
-    }) {
-        guard
-    } else {
-        // Fallback
-        eprintln!("[PERF][{}] {}", target, message);
-    }
+    // Das target: Argument muss ein String-Literal sein, also verwenden wir einen festen Wert
+    // und fügen das dynamische target in die Nachricht ein
+    tracing::debug!(target: "fenrir::perf", "[PERF][{}] {}", target, message);
 }
 
 /// Beispiel für strukturiertes Logging mit Pod-Typen

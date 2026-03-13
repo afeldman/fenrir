@@ -15,11 +15,12 @@ fenrir-servo  = { workspace = true }
 fenrir-network = { workspace = true }
 fenrir-config = { workspace = true }
 fenrir-i18n   = { path = "../crates/fenrir-i18n" }
-fenrir-log    = { path = "../crates/fenrir-log", features = ["tracing", "rolling", "perf"] }
+fenrir-log    = { path = "../crates/fenrir-log", features = ["tracing", "rolling"] }
 tokio          = { workspace = true }
 tracing        = { workspace = true }
 anyhow         = { workspace = true }
 url            = { workspace = true }
+fluent         = "0.16"
 
 # Windowing
 winit = "0.30.13"

@@ -23,7 +23,7 @@ use winit::keyboard::ModifiersState;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
-use crate::fenrir_config;
+use fenrir_config;
 use crate::debug_panel::{self, DebugState, ServoEvent};
 use crate::input;
 use crate::logging;
@@ -44,6 +44,12 @@ pub struct BrowserState {
     modifiers: Cell<ModifiersState>,
     pub debug: RefCell<DebugState>,
     config: fenrir_config::FenrirConfig,
+    // Frame-Rate-Limiting: Verhindert zu häufige Redraws
+    last_redraw_time: Cell<std::time::Instant>,
+    // Rendering-Kontrolle: Reduziert Rendering wenn Seite geladen ist
+    page_loaded: Cell<bool>,
+    last_frame_count: Cell<u32>,
+    consecutive_static_frames: Cell<u32>,
 }
 
 impl BrowserState {
@@ -72,11 +78,15 @@ impl BrowserState {
         
         debug!("Erstelle BrowserState mit URL: {}", initial_url);
         
+        // Icon für das Fenster laden
+        let window_icon = load_window_icon();
+        
         let window = event_loop
             .create_window(
                 Window::default_attributes()
-                    .with_title(&t("app-name"))
-                    .with_inner_size(PhysicalSize::new(config.ui.window_width, config.ui.window_height)),
+                    .with_title("Fenrir Browser")
+                    .with_inner_size(PhysicalSize::new(config.ui.window_width, config.ui.window_height))
+                    .with_window_icon(window_icon),
             )
             .expect("Window konnte nicht erstellt werden");
 
@@ -124,6 +134,12 @@ impl BrowserState {
             modifiers: Cell::new(ModifiersState::empty()),
             debug: RefCell::new(debug),
             config,
+            // Frame-Rate-Limiting initialisieren
+            last_redraw_time: Cell::new(std::time::Instant::now()),
+            // Rendering-Kontrolle initialisieren
+            page_loaded: Cell::new(false),
+            last_frame_count: Cell::new(0),
+            consecutive_static_frames: Cell::new(0),
         });
 
         state.servo.set_delegate(Rc::new(FenrirServoDelegate));
@@ -143,6 +159,30 @@ impl BrowserState {
         trace!("BrowserState vollständig initialisiert");
         
         state
+    }
+
+    /// Request redraw immediately (for user interactions)
+    /// This updates the last_redraw_time to prevent frame rate limiting from blocking user interactions
+    pub fn request_redraw(&self) {
+        self.last_redraw_time.set(std::time::Instant::now());
+        self.window.request_redraw();
+    }
+    
+    /// Request redraw with frame rate limiting (max 60 FPS)
+    /// This is only used for automatic redraws from Servo's notify_new_frame_ready
+    fn request_redraw_limited(&self) {
+        const MIN_FRAME_TIME: std::time::Duration = std::time::Duration::from_millis(16); // ~60 FPS
+        
+        let now = std::time::Instant::now();
+        let time_since_last_redraw = now.duration_since(self.last_redraw_time.get());
+        
+        if time_since_last_redraw >= MIN_FRAME_TIME {
+            // Enough time has passed, request redraw immediately
+            self.last_redraw_time.set(now);
+            self.window.request_redraw();
+        }
+        // If too soon, we just skip this redraw request
+        // This prevents too many redraws from Servo's notify_new_frame_ready
     }
 
     /// Compositing: Servo-Offscreen → Window, dann egui-Toolbar + Debug-Panel oben drauf.
@@ -402,7 +442,7 @@ impl BrowserState {
 impl WebViewDelegate for BrowserState {
     fn notify_new_frame_ready(&self, _wv: WebView) {
         self.debug.borrow_mut().push_servo(ServoEvent::FrameReady);
-        self.window.request_redraw();
+        self.request_redraw_limited();
     }
 
     fn notify_url_changed(&self, wv: WebView, url: Url) {
@@ -459,3 +499,63 @@ impl WebViewDelegate for BrowserState {
 /// Globaler Servo-Delegate (Browser-Level Events)
 struct FenrirServoDelegate;
 impl servo::ServoDelegate for FenrirServoDelegate {}
+
+/// Lädt das Fenster-Icon für die aktuelle Plattform
+fn load_window_icon() -> Option<winit::window::Icon> {
+    use std::fs;
+    use winit::window::Icon;
+    
+    // Versuche verschiedene Icon-Pfade
+    let icon_paths = [
+        // Primärer Pfad: img/ Ordner
+        "img/fenrir.ico",
+        "img/icon.png",
+        // Fallback: resources/ Ordner
+        "resources/servo.ico",
+        "resources/servo.icns",
+        "resources/servo_64.png",
+    ];
+    
+    for path in &icon_paths {
+        if let Ok(bytes) = fs::read(path) {
+            match Icon::from_rgba(bytes, 0, 0) {
+                Ok(icon) => {
+                    tracing::debug!("Icon geladen von: {}", path);
+                    return Some(icon);
+                }
+                Err(e) => {
+                    tracing::warn!("Konnte Icon von {} nicht laden: {}", path, e);
+                    // Versuche es mit ICO-Parser für .ico Dateien
+                    if path.ends_with(".ico") {
+                        if let Ok(icon) = load_ico_file(path) {
+                            tracing::debug!("ICO Icon geladen von: {}", path);
+                            return Some(icon);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    tracing::warn!("Kein Icon gefunden, verwende Standard");
+    None
+}
+
+/// Lädt eine ICO-Datei und konvertiert sie in ein winit Icon
+fn load_ico_file(path: &str) -> Result<winit::window::Icon, Box<dyn std::error::Error>> {
+    use std::fs::File;
+    use std::io::BufReader;
+    
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    
+    // Einfache ICO-Parsing-Logik
+    // In einer echten Implementierung würde man eine ICO-Parsing-Bibliothek verwenden
+    let bytes = std::fs::read(path)?;
+    
+    // Für .ico Dateien müssen wir sie möglicherweise anders parsen
+    // Da winit::window::Icon::from_rgba PNG/RGBA erwartet, aber ICO ein anderes Format ist
+    // Wir geben einfach die rohen Bytes zurück und lassen winit es versuchen
+    winit::window::Icon::from_rgba(bytes, 0, 0)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+}

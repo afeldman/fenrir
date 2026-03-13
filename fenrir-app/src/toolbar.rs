@@ -65,7 +65,7 @@ pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context, toolbar_height: 
     TopBottomPanel::top("fenrir_toolbar")
         .frame(frame)
         .exact_height(toolbar_height)
-        .show(ctx, |ui| {
+        .show(ctx, |ui| {            
             ui.horizontal_centered(|ui| {
                 // ← Back
                 let back = ui.add_enabled(

@@ -75,7 +75,8 @@ fn create_file_layer(
         builder = builder.compression(Compression::Gzip);
     }
     
-    let appender = builder.build()?;
+    let appender = builder.build()
+        .map_err(|e| LogError::LogrollerInit(e.to_string()))?;
     
     let (non_blocking, guard) = tracing_appender::non_blocking(appender);
     

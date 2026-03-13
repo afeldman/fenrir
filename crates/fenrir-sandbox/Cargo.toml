@@ -1,0 +1,31 @@
+[package]
+name = "fenrir-sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fenrir-core = { workspace = true }
+fenrir-secure = { workspace = true }
+fenrir-servo = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = "0.12"
+uuid = { version = "1.8", features = ["v4"] }
+
+# Servo dependencies
+servo = { workspace = true }
+embedder_traits = { workspace = true }
+
+# Tauri dependencies (commented out for now due to build issues)
+# tauri = { version = "2.0", features = ["api-all", "system-tray", "updater", "process-command-api"] }
+
+[dev-dependencies]
+tempfile = "3.10"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

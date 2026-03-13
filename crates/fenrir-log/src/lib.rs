@@ -67,6 +67,8 @@ pub struct FenrirLogger {
     
     #[cfg(feature = "perf")]
     perf_logger: Option<crate::perf::PerfLogger>,
+    #[cfg(not(feature = "perf"))]
+    _perf_placeholder: (),
     
     config: LogConfig,
 }
@@ -89,13 +91,15 @@ impl FenrirLogger {
         let perf_logger = crate::perf::PerfLogger::new(config.perf_config.clone())?;
         
         #[cfg(not(feature = "perf"))]
-        let perf_logger = None;
+        let _perf_logger = ();
         
         Ok(Self {
             #[cfg(feature = "tracing")]
             tracing_guard,
             #[cfg(feature = "perf")]
             perf_logger,
+            #[cfg(not(feature = "perf"))]
+            _perf_placeholder: (),
             config,
         })
     }
@@ -112,7 +116,10 @@ impl FenrirLogger {
         
         #[cfg(feature = "tracing")]
         if self.config.enable_tracing {
-            tracing::debug!(target: target, "{}", message);
+            // tracing::debug! ist ein Macro, kein Item
+            // In Rust 2021 Edition können wir es direkt verwenden
+            // Das target: Argument muss ein String-Literal sein
+            ::tracing::debug!(target: "fenrir::perf", "{}: {}", target, message);
         }
     }
     
@@ -127,14 +134,14 @@ impl FenrirLogger {
         message: &str,
     ) {
         if let Some(ref perf_logger) = self.perf_logger {
-            use tracing::Level;
-            
+            // tracing::Level ist in der tracing crate
+            // Wir müssen sicherstellen, dass tracing als dependency verfügbar ist
             let level = match self.config.perf_config.level {
-                config::LogLevel::Trace => Level::Trace,
-                config::LogLevel::Debug => Level::Debug,
-                config::LogLevel::Info => Level::Info,
-                config::LogLevel::Warn => Level::Warn,
-                config::LogLevel::Error => Level::Error,
+                config::LogLevel::Trace => ::tracing::Level::TRACE,
+                config::LogLevel::Debug => ::tracing::Level::DEBUG,
+                config::LogLevel::Info => ::tracing::Level::INFO,
+                config::LogLevel::Warn => ::tracing::Level::WARN,
+                config::LogLevel::Error => ::tracing::Level::ERROR,
             };
             
             inqjet::log!(level, target: target, "{}: {:?}", message, data);

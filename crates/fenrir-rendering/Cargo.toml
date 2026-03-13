@@ -1,0 +1,21 @@
+[package]
+name = "fenrir-rendering"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fenrir-core = { workspace = true }
+fenrir-metrics = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+# Servo embedding API
+servo = { workspace = true }
+surfman = { version = "0.11.0", features = ["chains"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+anyhow = { workspace = true }

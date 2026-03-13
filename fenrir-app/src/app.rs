@@ -35,7 +35,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
     fn user_event(&mut self, _: &ActiveEventLoop, _: WakerEvent) {
         if let Self::Running(state) = self {
             state.spin();
-            state.window.request_redraw();
+            state.request_redraw();
         }
     }
 
@@ -65,7 +65,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
             WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {
                     state.resize(new_size);
-                    state.window.request_redraw();
+                    state.request_redraw();
                 }
             }
 
@@ -103,7 +103,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
                         match c.as_str() {
                             "l" | "L" => {
                                 state.toolbar.borrow_mut().focus_url_bar();
-                                state.window.request_redraw();
+                                state.request_redraw();
                                 return;
                             }
                             "r" | "R" => { state.reload(); return; }
@@ -115,7 +115,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
                 if let winit::keyboard::Key::Named(named) = &key_event.logical_key {
                     match named {
                         NamedKey::F5 => { state.reload(); return; }
-                        NamedKey::F12 => { state.toggle_debug(); state.window.request_redraw(); return; }
+                        NamedKey::F12 => { state.toggle_debug(); state.request_redraw(); return; }
                         NamedKey::BrowserBack => { state.go_back(); return; }
                         NamedKey::BrowserForward => { state.go_forward(); return; }
                         NamedKey::BrowserRefresh => { state.reload(); return; }

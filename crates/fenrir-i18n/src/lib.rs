@@ -4,12 +4,11 @@
 //! It supports loading translations from locale files and provides a simple API for
 //! retrieving localized strings.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use fluent::{FluentArgs, FluentBundle, FluentResource};
-use fluent_fallback::Localization;
-use once_cell::sync::Lazy;
 use thiserror::Error;
 use tracing::{debug, error, info};
 use unic_langid::{langid, LanguageIdentifier};
@@ -130,7 +129,7 @@ impl std::fmt::Display for Language {
 
 /// Main i18n manager that holds all translations.
 pub struct I18nManager {
-    bundles: HashMap<LanguageIdentifier, Arc<FluentBundle<FluentResource>>>,
+    bundles: HashMap<LanguageIdentifier, Arc<std::sync::Mutex<FluentBundle<FluentResource>>>>,
     current_language: Language,
 }
 
@@ -162,9 +161,9 @@ impl I18nManager {
     }
     
     /// Load a Fluent bundle for a specific language.
-    fn load_bundle(langid: &LanguageIdentifier) -> Result<Option<FluentBundle<FluentResource>>, I18nError> {
+    fn load_bundle(langid: &LanguageIdentifier) -> Result<Option<Arc<std::sync::Mutex<FluentBundle<FluentResource>>>>, I18nError> {
         // Try to load the locale file
-        let resource_path = format!("locales/{}/fenrir.ftl", langid);
+        let _resource_path = format!("locales/{}/fenrir.ftl", langid);
         
         // For now, we'll embed the translations in the binary
         // In the future, we can load from files
@@ -179,13 +178,13 @@ impl I18nManager {
         };
         
         let resource = FluentResource::try_new(ftl_content.to_string())
-            .map_err(|e| I18nError::ResourceLoad(format!("Failed to parse FTL for {}: {}", langid, e)))?;
+            .map_err(|e| I18nError::ResourceLoad(format!("Failed to parse FTL for {}: {:?}", langid, e)))?;
         
         let mut bundle = FluentBundle::new(vec![langid.clone()]);
         bundle.add_resource(resource)
-            .map_err(|e| I18nError::ResourceLoad(format!("Failed to add resource for {}: {}", langid, e)))?;
+            .map_err(|e| I18nError::ResourceLoad(format!("Failed to add resource for {}: {:?}", langid, e)))?;
         
-        Ok(Some(bundle))
+        Ok(Some(Arc::new(std::sync::Mutex::new(bundle))))
     }
     
     /// Get a localized string for the current language.
@@ -197,7 +196,8 @@ impl I18nManager {
     pub fn get_with_args(&self, key: &str, args: Option<&FluentArgs>) -> Result<String, I18nError> {
         // Try current language first
         let langid = self.current_language.langid();
-        if let Some(bundle) = self.bundles.get(&langid) {
+        if let Some(bundle_mutex) = self.bundles.get(&langid) {
+            let bundle = bundle_mutex.lock().unwrap();
             if let Some(message) = bundle.get_message(key) {
                 if let Some(pattern) = message.value() {
                     let mut errors = Vec::new();
@@ -215,7 +215,8 @@ impl I18nManager {
         // Fallback to English
         if self.current_language != Language::EnUs {
             let en_langid = Language::EnUs.langid();
-            if let Some(bundle) = self.bundles.get(&en_langid) {
+            if let Some(bundle_mutex) = self.bundles.get(&en_langid) {
+                let bundle = bundle_mutex.lock().unwrap();
                 if let Some(message) = bundle.get_message(key) {
                     if let Some(pattern) = message.value() {
                         let mut errors = Vec::new();
@@ -256,48 +257,66 @@ impl I18nManager {
     }
 }
 
-/// Global i18n instance.
-static I18N: Lazy<std::sync::Mutex<I18nManager>> = Lazy::new(|| {
-    // Default to system language or English
-    let language = Language::system_default();
-    let manager = I18nManager::new(language)
-        .unwrap_or_else(|e| {
-            error!("Failed to initialize i18n: {}, falling back to English", e);
-            I18nManager::new(Language::EnUs).expect("English should always work")
-        });
-    std::sync::Mutex::new(manager)
-});
+thread_local! {
+    /// Thread-local i18n instance.
+    static I18N: RefCell<Option<I18nManager>> = RefCell::new(None);
+}
+
+/// Initialize or get the thread-local i18n instance.
+fn with_i18n<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut I18nManager) -> R,
+{
+    I18N.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if borrow.is_none() {
+            // Default to system language or English
+            let language = Language::system_default();
+            let manager = I18nManager::new(language)
+                .unwrap_or_else(|e| {
+                    error!("Failed to initialize i18n: {}, falling back to English", e);
+                    I18nManager::new(Language::EnUs).expect("English should always work")
+                });
+            *borrow = Some(manager);
+        }
+        f(borrow.as_mut().unwrap())
+    })
+}
 
 /// Get a localized string.
 pub fn t(key: &str) -> String {
-    match I18N.lock().unwrap().get(key) {
-        Ok(text) => text,
-        Err(e) => {
-            error!("Failed to get translation for '{}': {}", key, e);
-            format!("[{}]", key)
+    with_i18n(|manager| {
+        match manager.get(key) {
+            Ok(text) => text,
+            Err(e) => {
+                error!("Failed to get translation for '{}': {}", key, e);
+                format!("[{}]", key)
+            }
         }
-    }
+    })
 }
 
 /// Get a localized string with arguments.
 pub fn t_with_args(key: &str, args: &FluentArgs) -> String {
-    match I18N.lock().unwrap().get_with_args(key, Some(args)) {
-        Ok(text) => text,
-        Err(e) => {
-            error!("Failed to get translation for '{}' with args: {}", key, e);
-            format!("[{}]", key)
+    with_i18n(|manager| {
+        match manager.get_with_args(key, Some(args)) {
+            Ok(text) => text,
+            Err(e) => {
+                error!("Failed to get translation for '{}' with args: {}", key, e);
+                format!("[{}]", key)
+            }
         }
-    }
+    })
 }
 
 /// Change the current language.
 pub fn set_language(language: Language) -> Result<(), I18nError> {
-    I18N.lock().unwrap().set_language(language)
+    with_i18n(|manager| manager.set_language(language))
 }
 
 /// Get the current language.
 pub fn current_language() -> Language {
-    I18N.lock().unwrap().current_language()
+    with_i18n(|manager| manager.current_language())
 }
 
 /// Get all available languages.

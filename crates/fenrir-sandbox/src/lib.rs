@@ -242,7 +242,7 @@ impl SandboxManager {
                 info!("Instance {} load status: {:?}", instance_id, status);
                 // Show window when loading starts
                 if let Some(instance) = self.instance_manager.get_instance(instance_id) {
-                    if matches!(status, servo::LoadStatus::LoadStarted) {
+                    if matches!(status, servo::LoadStatus::Started) {
                         if let Err(e) = instance.window().show() {
                             error!("Failed to show window: {}", e);
                         }
@@ -250,14 +250,14 @@ impl SandboxManager {
                 }
             }
             InstanceEvent::PermissionRequest(request) => {
-                info!("Instance {} permission request: {:?}", instance_id, request);
+                info!("Instance {} permission request", instance_id);
                 // Forward to security manager
                 let grant = self.security_manager
                     .handle_servo_permission_request(request, instance_id);
                 info!("Permission grant result: {:?}", grant);
             }
-            InstanceEvent::NavigationRequest(request) => {
-                info!("Instance {} navigation request: {:?}", instance_id, request);
+            InstanceEvent::NavigationRequest(_request) => {
+                info!("Instance {} navigation request", instance_id);
                 // Handle navigation requests
                 // This could be used to implement custom navigation handling
             }

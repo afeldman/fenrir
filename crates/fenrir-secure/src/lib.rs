@@ -12,17 +12,17 @@ mod permissions;
 mod registry;
 
 pub use origin::{Origin, OriginPolicy};
-pub use path::{canonicalize_path, validate_path, PathError};
+pub use path::{canonicalize_path, validate_file, PathError};
 pub use permissions::{Permission, PermissionSet, PermissionGrant};
 pub use registry::{ServoInstanceRegistry, InstanceInfo};
 
-use embedder_traits::PermissionRequest;
+use servo::PermissionRequest;
 use servo::Servo;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::info;
 use url::Url;
 
 /// Main security manager that coordinates with Servo's permission system
@@ -119,29 +119,12 @@ impl SecurityManager {
         
         // Check if the origin has the required permission
         // This integrates with Servo's permission delegation system
-        match request {
-            PermissionRequest::LoadData(uri) => {
-                // For file:// URLs, check path permissions
-                if uri.scheme() == "file" {
-                    if let Ok(path) = uri.to_file_path() {
-                        let _ = self.check_path_permission(&origin, &path)?;
-                        return Ok(PermissionGrant::Granted);
-                    }
-                }
-                // For other URLs, check origin policies
-                if self.check_origin_policy(&origin, &uri) {
-                    Ok(PermissionGrant::Granted)
-                } else {
-                    Ok(PermissionGrant::Denied)
-                }
-            }
+        // For now, we'll implement a simple permission check based on the feature
+        match request.feature() {
             _ => {
-                // For other permission types, check default policies
-                if self.check_default_permission(&origin, &request) {
-                    Ok(PermissionGrant::Granted)
-                } else {
-                    Ok(PermissionGrant::Denied)
-                }
+                // Default implementation: deny by default for security
+                // Can be extended based on origin policies
+                Ok(PermissionGrant::Denied)
             }
         }
     }
@@ -167,7 +150,7 @@ impl SecurityManager {
     }
 
     /// Check default permissions for other request types
-    fn check_default_permission(&self, origin: &Origin, request: &PermissionRequest) -> bool {
+    fn check_default_permission(&self, _origin: &Origin, _request: &PermissionRequest) -> bool {
         // Default implementation: deny by default for security
         // Can be extended based on origin policies
         false

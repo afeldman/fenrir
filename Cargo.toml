@@ -77,6 +77,9 @@ fluent-bundle = { version = "0.15", features = ["unic-langid-ffi"] }
 fluent-fallback = "0.7"
 unic-langid = "0.9"
 
+# Tauri for desktop UI
+tauri = "2.0"
+
 servo           = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "libservo", default-features = false, features = ["js_jit", "background_hang_monitor"] }
 paint_api       = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "servo-paint-api" }
 embedder_traits = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "servo-embedder-traits" }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::info;
 
 /// Information about a registered Servo instance
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct InstanceInfo {
     /// Unique identifier for the instance
     pub id: String,
@@ -18,6 +18,16 @@ pub struct InstanceInfo {
     pub servo: Arc<Servo>,
     /// Timestamp when the instance was created
     pub created_at: std::time::Instant,
+}
+
+impl std::fmt::Debug for InstanceInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InstanceInfo")
+            .field("id", &self.id)
+            .field("origin", &self.origin)
+            .field("created_at", &self.created_at)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Registry of all active Servo instances

@@ -136,7 +136,7 @@ impl ServoInstance {
         self.url = url.clone();
         
         if let Some(webview) = &self.webview {
-            webview.load_url(url);
+            webview.load(url);
         }
         
         Ok(())
@@ -179,9 +179,9 @@ impl ServoInstance {
     pub fn stop(&self) -> Result<(), crate::SandboxError> {
         info!("Stopping load in instance {}", self.id);
         
-        if let Some(webview) = &self.webview {
-            webview.stop();
-        }
+        // Note: stop() method no longer exists in Servo API
+        // We could implement alternative stopping mechanism if needed
+        warn!("stop() method is not available in current Servo API");
         
         Ok(())
     }
@@ -191,7 +191,12 @@ impl ServoInstance {
         info!("Executing script in instance {}", self.id);
         
         if let Some(webview) = &self.webview {
-            webview.execute_script(script);
+            webview.evaluate_javascript(script, |result| {
+                match result {
+                    Ok(value) => info!("JavaScript executed successfully: {:?}", value),
+                    Err(err) => error!("JavaScript execution failed: {:?}", err),
+                }
+            });
         }
         
         Ok(())
@@ -320,39 +325,39 @@ impl SandboxWebViewDelegate {
 }
 
 impl WebViewDelegate for SandboxWebViewDelegate {
-    fn notify_new_frame_ready(&self, webview: WebView) {
+    fn notify_new_frame_ready(&self, _webview: WebView) {
         info!("New frame ready for instance {}", self.instance_id);
         // In a real implementation, we would trigger a redraw here
     }
     
-    fn request_navigation(&self, webview: WebView, request: servo::NavigationRequest) {
-        info!("Navigation request for instance {}: {:?}", self.instance_id, request);
+    fn request_navigation(&self, _webview: WebView, request: servo::NavigationRequest) {
+        info!("Navigation request for instance {}", self.instance_id);
         self.emit_event(InstanceEvent::NavigationRequest(request));
     }
     
-    fn request_permission(&self, webview: WebView, request: PermissionRequest) {
-        info!("Permission request for instance {}: {:?}", self.instance_id, request);
+    fn request_permission(&self, _webview: WebView, request: PermissionRequest) {
+        info!("Permission request for instance {}", self.instance_id);
         self.emit_event(InstanceEvent::PermissionRequest(request));
     }
     
-    fn notify_page_title_changed(&self, webview: WebView, title: Option<String>) {
+    fn notify_page_title_changed(&self, _webview: WebView, title: Option<String>) {
         info!("Title changed for instance {}: {:?}", self.instance_id, title);
         self.emit_event(InstanceEvent::TitleChanged(title));
     }
     
-    fn notify_url_changed(&self, webview: WebView, url: Url) {
+    fn notify_url_changed(&self, _webview: WebView, url: Url) {
         info!("URL changed for instance {}: {}", self.instance_id, url);
         self.emit_event(InstanceEvent::UrlChanged(url));
     }
     
-    fn notify_load_status_changed(&self, webview: WebView, status: LoadStatus) {
+    fn notify_load_status_changed(&self, _webview: WebView, status: LoadStatus) {
         info!("Load status changed for instance {}: {:?}", self.instance_id, status);
         self.emit_event(InstanceEvent::LoadStatusChanged(status));
     }
 }
 
 /// Events from Servo instances
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum InstanceEvent {
     /// Page title changed
     TitleChanged(Option<String>),

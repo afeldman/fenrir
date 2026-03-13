@@ -23,8 +23,8 @@ uuid = { version = "1.8", features = ["v4"] }
 servo = { workspace = true }
 embedder_traits = { workspace = true }
 
-# Tauri dependencies (commented out for now due to build issues)
-# tauri = { version = "2.0", features = ["api-all", "system-tray", "updater", "process-command-api"] }
+# Tauri dependencies
+tauri = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10"

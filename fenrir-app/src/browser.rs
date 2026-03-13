@@ -84,7 +84,7 @@ impl BrowserState {
         let window = event_loop
             .create_window(
                 Window::default_attributes()
-                    .with_title("Fenrir Browser")
+                    .with_title("Fenrir")
                     .with_inner_size(PhysicalSize::new(config.ui.window_width, config.ui.window_height))
                     .with_window_icon(window_icon),
             )

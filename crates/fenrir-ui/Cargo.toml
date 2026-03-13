@@ -19,8 +19,8 @@ url = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = "0.12"
 
-# Tauri dependencies (commented out for now due to build issues)
-# tauri = { version = "2.0", features = ["api-all", "system-tray", "updater", "process-command-api", "menu", "tray"] }
+# Tauri dependencies
+tauri = { workspace = true }
 
 # UI dependencies
 egui = { version = "0.27", features = ["persistence"] }

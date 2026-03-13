@@ -1,0 +1,136 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Matches vX.Y.Z
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+jobs:
+  build-release:
+    name: Build Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc, x86_64-apple-darwin]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.target }}
+
+    - name: Install cross-compilation dependencies (Linux)
+      if: matrix.target == 'x86_64-unknown-linux-gnu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+    - name: Install cross-compilation dependencies (Windows)
+      if: matrix.target == 'x86_64-pc-windows-msvc'
+      run: |
+        rustup target add x86_64-pc-windows-msvc
+
+    - name: Install cross-compilation dependencies (macOS)
+      if: matrix.target == 'x86_64-apple-darwin'
+      run: |
+        rustup target add x86_64-apple-darwin
+
+    - name: Build release binary
+      run: |
+        cargo build --release --target ${{ matrix.target }}
+        ls -la target/${{ matrix.target }}/release/
+
+    - name: Create release archive (Linux)
+      if: matrix.target == 'x86_64-unknown-linux-gnu'
+      run: |
+        cd target/x86_64-unknown-linux-gnu/release
+        tar -czvf fenrir-linux-x86_64.tar.gz fenrir
+        echo "ASSET_PATH=target/x86_64-unknown-linux-gnu/release/fenrir-linux-x86_64.tar.gz" >> $GITHUB_ENV
+
+    - name: Create release archive (Windows)
+      if: matrix.target == 'x86_64-pc-windows-msvc'
+      run: |
+        cd target/x86_64-pc-windows-msvc/release
+        7z a fenrir-windows-x86_64.zip fenrir.exe
+        echo "ASSET_PATH=target/x86_64-pc-windows-msvc/release/fenrir-windows-x86_64.zip" >> $GITHUB_ENV
+
+    - name: Create release archive (macOS)
+      if: matrix.target == 'x86_64-apple-darwin'
+      run: |
+        cd target/x86_64-apple-darwin/release
+        tar -czvf fenrir-macos-x86_64.tar.gz fenrir
+        echo "ASSET_PATH=target/x86_64-apple-darwin/release/fenrir-macos-x86_64.tar.gz" >> $GITHUB_ENV
+
+    - name: Upload release asset
+      uses: actions/upload-artifact@v4
+      with:
+        name: fenrir-${{ matrix.target }}
+        path: ${{ env.ASSET_PATH }}
+        retention-days: 1
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Fenrir ${{ github.ref_name }}
+        body: |
+          # Fenrir ${{ github.ref_name }}
+          
+          ## Release Notes
+          
+          ### Features
+          - 
+          
+          ### Bug Fixes
+          - 
+          
+          ### Improvements
+          - 
+          
+          ## Downloads
+          - **Linux**: `fenrir-linux-x86_64.tar.gz`
+          - **Windows**: `fenrir-windows-x86_64.zip`
+          - **macOS**: `fenrir-macos-x86_64.tar.gz`
+          
+          ## Installation
+          See [documentation](https://github.com/yourusername/fenrir/blob/main/docs/installation.md) for installation instructions.
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/fenrir-x86_64-unknown-linux-gnu/fenrir-linux-x86_64.tar.gz
+          artifacts/fenrir-x86_64-pc-windows-msvc/fenrir-windows-x86_64.zip
+          artifacts/fenrir-x86_64-apple-darwin/fenrir-macos-x86_64.tar.gz

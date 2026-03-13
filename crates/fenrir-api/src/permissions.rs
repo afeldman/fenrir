@@ -6,6 +6,7 @@
 //! - Permission management traits
 //! - Path mounting and permission tracking
 
+use crate::errors::ValidationError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

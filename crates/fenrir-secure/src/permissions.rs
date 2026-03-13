@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Types of permissions that can be granted
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Permission {
     /// Read files from local filesystem
     FileRead,
@@ -23,7 +23,7 @@ pub enum Permission {
     /// Access persistent storage
     PersistentStorage,
     /// Access to specific APIs
-    ApiAccess(&'static str),
+    ApiAccess(String),
 }
 
 /// A set of permissions

@@ -30,12 +30,16 @@ impl NoeumTokenizer {
     }
 
     /// Text → Token-IDs.
-    pub fn encode(&self, text: &str) -> Result<Vec<u32>, FenrirError> {
+    pub fn encode(&self, text: &str, add_bos: bool) -> Result<Vec<u32>, FenrirError> {
         let encoding = self.inner
             .encode(text, false)
             .map_err(|e| FenrirError::Config(format!("Encode Fehler: {e}")))?;
 
-        Ok(encoding.get_ids().to_vec())
+        let mut ids: Vec<u32> = encoding.get_ids().to_vec();
+        if add_bos {
+            ids.insert(0, self.bos_token_id);
+        }
+        Ok(ids)
     }
 
     /// Token-IDs → Text.
@@ -45,11 +49,11 @@ impl NoeumTokenizer {
             .map_err(|e| FenrirError::Config(format!("Decode Fehler: {e}")))
     }
 
-    pub fn eos_token_id(&self) -> u32 {
+    pub fn eos_id(&self) -> u32 {
         self.eos_token_id
     }
 
-    pub fn bos_token_id(&self) -> u32 {
+    pub fn bos_id(&self) -> u32 {
         self.bos_token_id
     }
 

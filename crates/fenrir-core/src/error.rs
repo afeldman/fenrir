@@ -31,6 +31,9 @@ pub enum FenrirError {
 
     #[error("AI/ML error: {0}")]
     Ai(String),
+
+    #[error("Candle ML error: {0}")]
+    Candle(#[from] candle_core::Error),
 }
 
 /// Kurzform für Result mit FenrirError.

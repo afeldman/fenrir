@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use std::{env, fs};
 
 use servo::resources::{self, Resource, ResourceReaderMethods};
+use tracing::{debug, error};
 
 static RESOURCES_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
@@ -29,6 +30,7 @@ fn resources_dir() -> PathBuf {
     if let Ok(path) = env::var("FENRIR_RESOURCES") {
         let p = PathBuf::from(path);
         if p.is_dir() {
+            debug!(path = %p.display(), "resources_dir gefunden via FENRIR_RESOURCES env");
             *cache = Some(p.clone());
             return p;
         }
@@ -40,6 +42,7 @@ fn resources_dir() -> PathBuf {
             for name in &["resources", "Resources"] {
                 let candidate = exe.join(name);
                 if candidate.is_dir() {
+                    debug!(path = %candidate.display(), "resources_dir gefunden relativ zum Executable");
                     *cache = Some(candidate.clone());
                     return candidate;
                 }
@@ -51,10 +54,12 @@ fn resources_dir() -> PathBuf {
     let cwd = env::current_dir().unwrap_or_default();
     let candidate = cwd.join("resources");
     if candidate.is_dir() {
+        debug!(path = %candidate.display(), "resources_dir gefunden im Arbeitsverzeichnis");
         *cache = Some(candidate.clone());
         return candidate;
     }
 
+    error!("Servo resources/ Verzeichnis nicht gefunden");
     panic!(
         "Servo resources/ Verzeichnis nicht gefunden.\n\
          Optionen:\n\
@@ -66,7 +71,10 @@ fn resources_dir() -> PathBuf {
 impl ResourceReaderMethods for FenrirResourceReader {
     fn read(&self, res: Resource) -> Vec<u8> {
         let path = resources_dir().join(res.filename());
-        fs::read(&path).unwrap_or_else(|e| panic!("Resource {:?} nicht lesbar: {e}", path))
+        fs::read(&path).unwrap_or_else(|e| {
+            error!(path = %path.display(), error = %e, "resource nicht lesbar");
+            panic!("Resource {:?} nicht lesbar: {e}", path)
+        })
     }
 
     fn sandbox_access_files_dirs(&self) -> Vec<PathBuf> {

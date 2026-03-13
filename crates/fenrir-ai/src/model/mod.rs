@@ -154,7 +154,6 @@ pub struct RamoModel {
     layers: Vec<DecoderLayer>,
     head_norm: RmsNorm,
     lm_head: Linear,
-    cfg: RamoConfig,
 }
 
 impl RamoModel {
@@ -198,7 +197,6 @@ impl RamoModel {
             layers,
             head_norm,
             lm_head,
-            cfg: cfg.clone(),
         })
     }
 

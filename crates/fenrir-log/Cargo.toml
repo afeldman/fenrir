@@ -1,0 +1,47 @@
+[package]
+name = "fenrir-log"
+version = "0.1.0"
+edition = "2021"
+authors = ["Fenrir Contributors"]
+license = "EUPL-1.2"
+description = "Hybrid logging library for Fenrir with tracing and high-performance inqjet backend"
+repository = "https://github.com/fenrir-browser/fenrir"
+readme = "README.md"
+
+[features]
+default = ["tracing", "rolling"]
+tracing = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender"]
+rolling = ["dep:logroller"]
+perf = ["dep:inqjet", "dep:inqjet-macros"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"], optional = true }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging backends
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+tracing-appender = { version = "0.2", optional = true }
+logroller = { version = "0.1", optional = true }
+
+# High-performance logging
+inqjet = { version = "1.1", optional = true }
+inqjet-macros = { version = "1.0", optional = true }
+
+# Serialization
+serde = { version = "1", features = ["derive"], optional = true }
+
+# Configuration
+once_cell = "1.20"
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3.10"
+
+[[bench]]
+name = "logging_benchmarks"
+harness = false

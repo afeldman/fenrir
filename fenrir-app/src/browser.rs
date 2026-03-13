@@ -14,7 +14,7 @@ use servo::{
     PermissionRequest, RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder,
     WebViewDelegate, WindowRenderingContext,
 };
-use tracing::{info, warn};
+use tracing::{info, warn, debug, error, trace};
 use url::Url;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
@@ -23,10 +23,14 @@ use winit::keyboard::ModifiersState;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
+use crate::fenrir_config;
 use crate::debug_panel::{self, DebugState, ServoEvent};
 use crate::input;
-use crate::toolbar::{self, ToolbarAction, ToolbarState, TOOLBAR_HEIGHT_PX};
+use crate::logging;
+use crate::toolbar::{self, ToolbarAction, ToolbarState};
 use crate::waker::FenrirWaker;
+use fenrir_i18n::{t, t_with_args};
+use fluent::FluentArgs;
 
 pub struct BrowserState {
     pub window: Window,
@@ -39,17 +43,44 @@ pub struct BrowserState {
     mouse_pos: Cell<(f32, f32)>,
     modifiers: Cell<ModifiersState>,
     pub debug: RefCell<DebugState>,
+    config: fenrir_config::FenrirConfig,
 }
 
 impl BrowserState {
-    pub fn new(event_loop: &ActiveEventLoop, waker: FenrirWaker, initial_url: Url) -> Rc<Self> {
+    pub fn new(event_loop: &ActiveEventLoop, waker: FenrirWaker) -> Rc<Self> {
+        // Config laden
+        let config = fenrir_config::load().unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Config-Fehler, nutze Defaults");
+            fenrir_config::FenrirConfig::default()
+        });
+        
+        tracing::debug!("Geladene Konfiguration: start_url = {}", config.ui.start_url);
+        
+        // Start-URL aus Konfiguration parsen
+        let initial_url = match Url::parse(&config.ui.start_url) {
+            Ok(url) => {
+                tracing::debug!("URL erfolgreich geparsed: {}", url);
+                url
+            },
+            Err(e) => {
+                tracing::warn!("Ungültige Start-URL in Konfiguration: {}, Fehler: {}, verwende Standard", config.ui.start_url, e);
+                let default_url = Url::parse(&config.ui.start_url).unwrap();
+                tracing::debug!("Verwende Standard-URL: {}", default_url);
+                default_url
+            }
+        };
+        
+        debug!("Erstelle BrowserState mit URL: {}", initial_url);
+        
         let window = event_loop
             .create_window(
                 Window::default_attributes()
-                    .with_title("Fenrir")
-                    .with_inner_size(PhysicalSize::new(1280u32, 800u32)),
+                    .with_title(&t("app-name"))
+                    .with_inner_size(PhysicalSize::new(config.ui.window_width, config.ui.window_height)),
             )
             .expect("Window konnte nicht erstellt werden");
+
+        trace!("Fenster erstellt: {}x{}", window.inner_size().width, window.inner_size().height);
 
         let window_ctx = Rc::new(
             WindowRenderingContext::new(
@@ -61,12 +92,15 @@ impl BrowserState {
         );
         window_ctx.make_current().expect("make_current");
 
-        let toolbar_offset = (TOOLBAR_HEIGHT_PX * window.scale_factor() as f32) as u32;
+        let toolbar_offset = (config.ui.toolbar_height * window.scale_factor() as f32) as u32;
         let servo_size = PhysicalSize::new(
             window.inner_size().width,
             window.inner_size().height.saturating_sub(toolbar_offset),
         );
+        debug!("Servo Größe: {}x{} (Toolbar: {}px)", servo_size.width, servo_size.height, toolbar_offset);
+        
         let servo_ctx = Rc::new(window_ctx.offscreen_context(servo_size));
+
         let egui = EguiGlow::new(event_loop, window_ctx.glow_gl_api(), None, None, true);
 
         let servo = ServoBuilder::default()
@@ -89,6 +123,7 @@ impl BrowserState {
             mouse_pos: Cell::new((0.0, 0.0)),
             modifiers: Cell::new(ModifiersState::empty()),
             debug: RefCell::new(debug),
+            config,
         });
 
         state.servo.set_delegate(Rc::new(FenrirServoDelegate));
@@ -97,18 +132,23 @@ impl BrowserState {
             &state.servo,
             state.servo_ctx.clone() as Rc<dyn RenderingContext>,
         )
-        .url(initial_url)
+        .url(initial_url.clone())
         .hidpi_scale_factor(Scale::new(state.window.scale_factor() as f32))
         .delegate(state.clone())
         .build();
 
         *state.webview.borrow_mut() = Some(webview);
-        info!("Browser gestartet");
+        
+        info!("Browser gestartet mit URL: {}", initial_url);
+        trace!("BrowserState vollständig initialisiert");
+        
         state
     }
 
     /// Compositing: Servo-Offscreen → Window, dann egui-Toolbar + Debug-Panel oben drauf.
     pub fn render(&self) {
+        trace!("Beginne Render-Zyklus");
+        
         // Offscreen-Kontext current setzen (Servo rendert dorthin),
         // dann Window-Kontext für egui/blit vorbereiten — Reihenfolge wie in servoshell.
         self.servo_ctx.make_current().expect("servo_ctx make_current");
@@ -134,14 +174,16 @@ impl BrowserState {
                 .map(|b| Arc::from(b) as Arc<BlitFn>);
             let blit_is_some = blit_callback.is_some();
             dbg.record_render(blit_is_some);
+            
+            trace!("Blit-Callback verfügbar: {}", blit_is_some);
 
             egui.run(&self.window, |ctx| {
                 if let Some(blit) = &blit_callback {
                     let blit = blit.clone(); // Arc::clone — billig
                     let screen = ctx.screen_rect();
                     let webview_rect = egui::Rect::from_min_size(
-                        egui::pos2(0.0, TOOLBAR_HEIGHT_PX),
-                        egui::vec2(screen.width(), screen.height() - TOOLBAR_HEIGHT_PX),
+                        egui::pos2(0.0, self.config.ui.toolbar_height),
+                        egui::vec2(screen.width(), screen.height() - self.config.ui.toolbar_height),
                     );
                     ctx.layer_painter(egui::LayerId::background()).add(
                         egui::PaintCallback {
@@ -153,19 +195,37 @@ impl BrowserState {
                                         euclid::default::Point2D::new(clip.left_px, clip.from_bottom_px),
                                         euclid::default::Size2D::new(clip.width_px, clip.height_px),
                                     );
+                                    trace!("Blit aufgerufen: {:?}", target);
                                     blit(painter.gl(), target);
                                 },
                             )),
                         },
                     );
+                } else {
+                    trace!("Kein Blit-Callback verfügbar - weißes Canvas?");
                 }
 
-                match toolbar::render(&mut toolbar, ctx) {
-                    ToolbarAction::Navigate(url) => nav_url = Some(url),
-                    ToolbarAction::Back          => nav_back = true,
-                    ToolbarAction::Forward       => nav_fwd = true,
-                    ToolbarAction::Reload        => nav_reload = true,
-                    ToolbarAction::FocusUrl      => focus_url = true,
+                match toolbar::render(&mut toolbar, ctx, self.config.ui.toolbar_height) {
+                    ToolbarAction::Navigate(url) => {
+                        trace!("Toolbar Navigation: {}", url);
+                        nav_url = Some(url)
+                    },
+                    ToolbarAction::Back          => {
+                        trace!("Toolbar Back");
+                        nav_back = true
+                    },
+                    ToolbarAction::Forward       => {
+                        trace!("Toolbar Forward");
+                        nav_fwd = true
+                    },
+                    ToolbarAction::Reload        => {
+                        trace!("Toolbar Reload");
+                        nav_reload = true
+                    },
+                    ToolbarAction::FocusUrl      => {
+                        trace!("Toolbar Focus URL");
+                        focus_url = true
+                    },
                     ToolbarAction::None          => {}
                 }
 
@@ -173,15 +233,31 @@ impl BrowserState {
             });
         }
 
-        if focus_url { self.toolbar.borrow_mut().focus_url_bar(); }
+        if focus_url { 
+            trace!("Fokussiere URL-Bar");
+            self.toolbar.borrow_mut().focus_url_bar(); 
+        }
 
         egui.paint(&self.window);
         self.window_ctx.present();
+        trace!("Render abgeschlossen, präsentiert");
 
-        if let Some(url) = nav_url { self.navigate_string(url); }
-        if nav_back    { self.go_back(); }
-        if nav_fwd     { self.go_forward(); }
-        if nav_reload  { self.reload(); }
+        if let Some(url) = nav_url { 
+            trace!("Navigiere zu: {}", url);
+            self.navigate_string(url); 
+        }
+        if nav_back    { 
+            trace!("Gehe zurück");
+            self.go_back(); 
+        }
+        if nav_fwd     { 
+            trace!("Gehe vorwärts");
+            self.go_forward(); 
+        }
+        if nav_reload  { 
+            trace!("Lade neu");
+            self.reload(); 
+        }
     }
 
     pub fn spin(&self) {
@@ -191,7 +267,7 @@ impl BrowserState {
 
     pub fn resize(&self, new_size: PhysicalSize<u32>) {
         let scale = self.window.scale_factor() as f32;
-        let toolbar_px = (TOOLBAR_HEIGHT_PX * scale) as u32;
+        let toolbar_px = (self.config.ui.toolbar_height * scale) as u32;
         let servo_size = PhysicalSize::new(
             new_size.width,
             new_size.height.saturating_sub(toolbar_px),
@@ -218,7 +294,7 @@ impl BrowserState {
 
     pub fn handle_cursor_moved(&self, position: PhysicalPosition<f64>) {
         let scale = self.window.scale_factor() as f32;
-        let toolbar_px = TOOLBAR_HEIGHT_PX * scale;
+        let toolbar_px = self.config.ui.toolbar_height * scale;
         let x = position.x as f32;
         let y = position.y as f32 - toolbar_px;
         self.mouse_pos.set((x, y));
@@ -291,7 +367,8 @@ impl BrowserState {
         } else if raw.contains('.') && !raw.contains(' ') {
             format!("https://{raw}")
         } else {
-            format!("https://duckduckgo.com/?q={}", urlencoding::encode(&raw))
+            // Verwende die konfigurierte Suchmaschine
+            self.config.privacy.search_engine.search_url(&raw)
         };
         match Url::parse(&url_str) {
             Ok(url) => {
@@ -342,11 +419,16 @@ impl WebViewDelegate for BrowserState {
     }
 
     fn notify_page_title_changed(&self, _wv: WebView, title: Option<String>) {
-        let t = title.unwrap_or_else(|| "Fenrir".to_string());
+        let t = title.unwrap_or_else(|| t("app-name"));
         self.debug.borrow_mut().push_servo(ServoEvent::TitleChanged(t.clone()));
         self.debug.borrow_mut().page_title = t.clone();
         self.toolbar.borrow_mut().page_title = t.clone();
-        self.window.set_title(&format!("Fenrir — {t}"));
+        
+        // Use i18n for window title
+        let mut args = FluentArgs::new();
+        args.set("title", t.clone());
+        let window_title = t_with_args("app-title", &args);
+        self.window.set_title(&window_title);
     }
 
     fn notify_load_status_changed(&self, wv: WebView, status: LoadStatus) {

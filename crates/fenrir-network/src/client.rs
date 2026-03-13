@@ -12,7 +12,6 @@ use reqwest::{Client, Method, RequestBuilder};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
-use url::Url;
 
 pub struct FenrirHttpClient {
     inner: Client,

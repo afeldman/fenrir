@@ -6,8 +6,8 @@
 
 use crate::request::NetworkRequest;
 use async_trait::async_trait;
-use fenrir_core::types::FenrirUrl;
 use std::sync::Arc;
+use tracing::{debug, error, info};
 use url::Url;
 
 /// Ergebnis eines Interceptors.
@@ -77,7 +77,12 @@ impl NetworkInterceptor for AllowAllInterceptor {
         "allow-all"
     }
 
-    async fn intercept(&self, _request: &NetworkRequest) -> InterceptorResult {
+    async fn intercept(&self, request: &NetworkRequest) -> InterceptorResult {
+        debug!(
+            method = %request.method,
+            url = %request.url,
+            "network: request intercepted (allow-all)"
+        );
         InterceptorResult::Allow
     }
 }
@@ -93,6 +98,12 @@ impl NetworkInterceptor for HttpsEnforcer {
     }
 
     async fn intercept(&self, request: &NetworkRequest) -> InterceptorResult {
+        debug!(
+            method = %request.method,
+            url = %request.url,
+            "network: request intercepted"
+        );
+
         if request.scheme() == "http" {
             // localhost / 127.0.0.1 erlauben (dev)
             let host = request.host().unwrap_or("");
@@ -100,13 +111,23 @@ impl NetworkInterceptor for HttpsEnforcer {
                 return InterceptorResult::Allow;
             }
             // HTTP → HTTPS upgrade versuchen
-            if let Ok(mut https_url) = request.url.clone().into_string().parse::<Url>() {
+            if let Ok(_https_url) = request.url.to_string().parse::<Url>() {
                 // Einfacher Weg: URL-String ersetzen
                 let https_str = request.url.as_str().replacen("http://", "https://", 1);
                 if let Ok(url) = Url::parse(&https_str) {
+                    info!(
+                        original = %request.url,
+                        upgraded = %url,
+                        "network: HTTP→HTTPS upgrade"
+                    );
                     return InterceptorResult::Redirect(url);
                 }
             }
+            
+            error!(
+                url = %request.url,
+                "network: HTTP request ohne HTTPS-Upgrade-Möglichkeit"
+            );
         }
         InterceptorResult::Allow
     }

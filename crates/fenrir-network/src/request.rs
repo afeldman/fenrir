@@ -2,7 +2,6 @@
 //!
 //! Unabhängig von reqwest/Servo-Typen, damit die Pipeline tauschbar bleibt.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 

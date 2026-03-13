@@ -1,0 +1,35 @@
+[package]
+name = "fenrir-error-management"
+version = "0.1.0"
+edition = "2021"
+description = "Fehler-Management-System für Fenrir Browser mit AI-Integration"
+license = "Apache-2.0 OR MIT"
+authors = ["Fenrir Team"]
+repository = "https://github.com/fenrir-browser/fenrir"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+log = "0.4"
+once_cell = "1.19"
+parking_lot = "0.12"
+
+# Fenrir interne Abhängigkeiten
+fenrir-core = { path = "../fenrir-core" }
+fenrir-ai = { path = "../fenrir-ai", optional = true }
+
+[features]
+default = []
+ai-integration = ["fenrir-ai"]
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

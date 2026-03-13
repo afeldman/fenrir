@@ -5,12 +5,10 @@
 
 use super::RamoConfig;
 use candle_core::{Device, Result, Tensor};
-use std::f64::consts::PI;
 
 pub struct RotaryEmbedding {
     cos: Tensor,
     sin: Tensor,
-    head_dim: usize,
 }
 
 impl RotaryEmbedding {
@@ -27,7 +25,7 @@ impl RotaryEmbedding {
         let cos = Tensor::from_vec(cos_vals, (max_seq, head_dim / 2), device)?;
         let sin = Tensor::from_vec(sin_vals, (max_seq, head_dim / 2), device)?;
 
-        Ok(Self { cos, sin, head_dim })
+        Ok(Self { cos, sin })
     }
 
     /// Gibt cos/sin Tensoren für gegebene Positionen zurück.
@@ -43,9 +41,9 @@ fn yarn_frequencies(
     head_dim: usize,
     max_seq: usize,
     theta: f64,
-    factor: f64,
-    beta_fast: f64,
-    beta_slow: f64,
+    _factor: f64,
+    _beta_fast: f64,
+    _beta_slow: f64,
 ) -> Result<Vec<f64>> {
     let half_dim = head_dim / 2;
 
@@ -89,5 +87,5 @@ fn rotate_half(x: &Tensor, cos: &Tensor, sin: &Tensor) -> Result<Tensor> {
     let cos = cos.unsqueeze(0)?.unsqueeze(0)?;
     let sin = sin.unsqueeze(0)?.unsqueeze(0)?;
 
-    (x.broadcast_mul(&cos)? + rotated.broadcast_mul(&sin)?)
+    x.broadcast_mul(&cos)? + rotated.broadcast_mul(&sin)?
 }

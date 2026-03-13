@@ -10,7 +10,7 @@ use hickory_resolver::{
     net::runtime::TokioRuntimeProvider,
 };
 use std::net::IpAddr;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 pub struct FenrirDnsResolver {
     inner: TokioResolver,
@@ -59,17 +59,24 @@ impl FenrirDnsResolver {
 
     /// Hostname → IP-Adressen auflösen.
     pub async fn resolve(&self, host: &str) -> Result<Vec<IpAddr>, FenrirError> {
+        debug!(host = %host, resolver = "DoH", "dns: lookup");
+        
         let lookup = self
             .inner
             .lookup_ip(host)
             .await
-            .map_err(|e| FenrirError::Network(format!("DNS Fehler für '{host}': {e}")))?;
+            .map_err(|e| {
+                warn!(host = %host, error = %e, "dns: lookup fehlgeschlagen");
+                FenrirError::Network(format!("DNS Fehler für '{host}': {e}"))
+            })?;
 
         let addrs: Vec<IpAddr> = lookup.iter().collect();
         if addrs.is_empty() {
+            warn!(host = %host, "dns: keine Einträge gefunden");
             return Err(FenrirError::Network(format!("Keine DNS-Einträge für '{host}'")));
         }
 
+        debug!(host = %host, addrs = ?addrs, "dns: lookup erfolgreich");
         Ok(addrs)
     }
 }

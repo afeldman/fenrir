@@ -12,7 +12,7 @@ pub use waker::FenrirEventLoopWaker;
 pub use webview_delegate::FenrirWebViewDelegate;
 
 use fenrir_core::error::FenrirError;
-use fenrir_network::{FenrirHttpClient, FenrirNetworkHandler, interceptor::InterceptorPipeline};
+use fenrir_network::FenrirNetworkHandler;
 use servo::{Servo, ServoBuilder, WebView, WebViewBuilder};
 use std::rc::Rc;
 use std::sync::Arc;

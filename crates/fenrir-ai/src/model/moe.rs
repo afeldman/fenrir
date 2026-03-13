@@ -66,7 +66,7 @@ impl MoE {
         }
 
         // 3. Geroutete Experts (sparse)
-        let n_tokens = bsz * seq;
+        let _n_tokens = bsz * seq;
         for expert_id in 0..self.gate.n_experts {
             // Maske: welche Tokens gehen zu diesem Expert?
             let mut token_indices = Vec::new();

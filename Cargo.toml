@@ -8,6 +8,8 @@ members = [
     "crates/fenrir-mcp",
     "crates/fenrir-network",
     "crates/fenrir-ai",
+    "crates/fenrir-config",
+    "crates/fenrir-log",
 ]
 
 [workspace.package]
@@ -25,16 +27,7 @@ fenrir-servo = { path = "crates/fenrir-servo" }
 fenrir-mcp = { path = "crates/fenrir-mcp" }
 fenrir-network = { path = "crates/fenrir-network" }
 fenrir-ai = { path = "crates/fenrir-ai" }
-
-# Servo embedding API — git, kein lokaler Checkout nötig.
-# Beim Servo-Upgrade: tag + rust-toolchain.toml anpassen,
-# dann `cargo update -p servo` und resources/ aktualisieren.
-servo = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "libservo", default-features = false, features = [
-    "js_jit",
-    "background_hang_monitor",
-] }
-paint_api = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "paint_api" }
-embedder_traits = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "embedder_traits" }
+fenrir-config = { path = "crates/fenrir-config" }
 
 # Async
 tokio = { version = "1", features = ["full"] }
@@ -46,6 +39,9 @@ anyhow = "1"
 # Logging / Tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+logroller = "0.1"
+once_cell = "1.20"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -56,6 +52,25 @@ zeroize = { version = "1", features = ["derive"] }
 
 # URLs
 url = "2"
+
+# Internationalization
+fluent = "0.16"
+fluent-bundle = { version = "0.15", features = ["unic-langid-ffi"] }
+fluent-fallback = "0.7"
+unic-langid = "0.9"
+
+servo           = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "libservo", default-features = false, features = ["js_jit", "background_hang_monitor"] }
+paint_api       = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "servo-paint-api" }
+embedder_traits = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "servo-embedder-traits" }
+
+# ── Local Servo development override ─────────────────────────────────────────
+# To test IntersectionObserver fixes (or any upstream MR) in Fenrir before merge:
+#
+# 1. The servo git dep currently uses package = "libservo" (v0.0.5 name).
+#    The local checkout (post-v0.0.5 main branch) uses package = "servo".
+#    Either temporarily rename the local Cargo.toml package to "libservo", or
+#    bump fenrir's dep to the next servo release which exposes "servo" as the name.
+#
 
 [profile.dev]
 opt-level = 1

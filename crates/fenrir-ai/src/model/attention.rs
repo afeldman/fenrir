@@ -22,7 +22,7 @@ pub struct Attention {
 }
 
 impl Attention {
-    pub fn new(vb: VarBuilder, cfg: &RamoConfig, rotary_emb: &RotaryEmbedding) -> Result<Self> {
+    pub fn new(vb: VarBuilder, cfg: &RamoConfig, _rotary_emb: &RotaryEmbedding) -> Result<Self> {
         let hidden = cfg.hidden_size;
         let num_heads = cfg.num_attention_heads;
         let num_kv_heads = cfg.num_key_value_heads;
@@ -134,7 +134,7 @@ fn repeat_kv(x: &Tensor, n_rep: usize) -> Result<Tensor> {
 }
 
 /// Causal Mask: zukünftige Tokens auf -inf setzen.
-fn apply_causal_mask(scores: &Tensor, offset: usize) -> Result<Tensor> {
+fn apply_causal_mask(scores: &Tensor, _offset: usize) -> Result<Tensor> {
     let (bsz, heads, q_len, kv_len) = scores.dims4()?;
     if q_len == 1 {
         // Decoding-Schritt: kein Masking nötig

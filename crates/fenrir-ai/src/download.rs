@@ -1,85 +1,61 @@
 //! Model Downloader — lädt noeum-1-nano von HuggingFace.
 //!
 //! Nutzt hf-hub (HuggingFace's offizieller Rust Client).
-//! Cacht Modelle in ~/.cache/huggingface/ (Standard HF Cache).
+//! Speichert Modelle in ~/.local/share/fenrir/models/noeum-1-nano/
 
 use fenrir_core::error::FenrirError;
 use hf_hub::{Repo, RepoType, api::tokio::Api};
 use std::path::PathBuf;
 use tracing::info;
 
-pub const MODEL_REPO: &str = "noeum/noeum-1-nano";
-pub const MODEL_FILES: &[&str] = &[
-    "config.json",
-    "generation_config.json",
-    "tokenizer.model",
-    "tokenizer_config.json",
-    "special_tokens_map.json",
-    "added_tokens.json",
-    "pytorch_model.bin",
-];
-
 pub struct ModelDownloader {
-    api: Api,
+    model_id: String,
+    local_dir: PathBuf,
 }
 
 impl ModelDownloader {
     pub fn new() -> Self {
         Self {
-            api: Api::new().expect("HF Hub API konnte nicht initialisiert werden"),
+            model_id: "noeum/noeum-1-nano".to_string(),
+            local_dir: dirs::data_local_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("fenrir/models/noeum-1-nano"),
         }
     }
 
-    /// Stellt sicher dass alle Modell-Dateien lokal vorhanden sind.
-    /// Download nur wenn nötig (HF Hub cacht automatisch).
+    /// Lädt Modell herunter wenn nicht vorhanden. Gibt Verzeichnis zurück.
     pub async fn ensure_downloaded(&self) -> Result<PathBuf, FenrirError> {
-        info!("Prüfe noeum-1-nano Modell-Cache");
-
-        let repo = self.api.repo(Repo::new(
-            MODEL_REPO.to_string(),
-            RepoType::Model,
-        ));
-
-        let mut model_dir = None;
-
-        for filename in MODEL_FILES {
-            info!(file = filename, "Sicherstellen dass Datei vorhanden");
-            let path = repo
-                .get(filename)
-                .await
-                .map_err(|e| FenrirError::Network(
-                    format!("Download fehlgeschlagen für '{filename}': {e}")
-                ))?;
-
-            // Alle Dateien liegen im gleichen Verzeichnis
-            if model_dir.is_none() {
-                model_dir = path.parent().map(|p| p.to_path_buf());
-            }
+        // Prüfen ob bereits vorhanden
+        let model_path = self.local_dir.join("pytorch_model.bin");
+        if model_path.exists() {
+            info!(path = %self.local_dir.display(), "Modell bereits vorhanden");
+            return Ok(self.local_dir.clone());
         }
 
-        let dir = model_dir
-            .ok_or_else(|| FenrirError::Config("Modell-Verzeichnis nicht gefunden".into()))?;
+        info!(model = %self.model_id, "Lade noeum-1-nano von HuggingFace...");
+        std::fs::create_dir_all(&self.local_dir)
+            .map_err(|e| FenrirError::Io(e))?;
 
-        info!(dir = %dir.display(), "Noeum-1-Nano vollständig verfügbar");
-        Ok(dir)
-    }
+        let api = Api::new().map_err(|e| FenrirError::Network(e.to_string()))?;
+        let repo = api.repo(Repo::new(self.model_id.clone(), RepoType::Model));
 
-    /// Gibt das Cache-Verzeichnis zurück ohne Download.
-    pub fn cache_dir(&self) -> PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("~/.cache"))
-            .join("huggingface")
-            .join("hub")
-    }
+        for filename in &[
+            "config.json",
+            "tokenizer_config.json",
+            "tokenizer.model",
+            "pytorch_model.bin",
+            "generation_config.json",
+        ] {
+            info!(file = filename, "Download...");
+            let path = repo.get(filename).await
+                .map_err(|e| FenrirError::Network(format!("Download fehlgeschlagen für '{filename}': {e}")))?;
+            let dest = self.local_dir.join(filename);
+            std::fs::copy(&path, &dest)
+                .map_err(|e| FenrirError::Io(e))?;
+        }
 
-    /// Ist das Modell bereits vollständig gecacht?
-    pub async fn is_cached(&self) -> bool {
-        let repo = self.api.repo(Repo::new(
-            MODEL_REPO.to_string(),
-            RepoType::Model,
-        ));
-        // Prüfe nur config.json als schnellen Check
-        repo.get("config.json").await.is_ok()
+        info!(path = %self.local_dir.display(), "Download abgeschlossen");
+        Ok(self.local_dir.clone())
     }
 }
 

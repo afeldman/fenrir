@@ -11,8 +11,6 @@ use winit::keyboard::NamedKey;
 use crate::browser::BrowserState;
 use crate::waker::{FenrirWaker, WakerEvent};
 
-const DEFAULT_URL: &str = "https://start.duckduckgo.com";
-
 pub enum BrowserApp {
     Initial(FenrirWaker),
     Running(Rc<BrowserState>),
@@ -28,8 +26,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
     /// Fenster erstellen wenn Plattform bereit ist.
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Self::Initial(waker) = self {
-            let url = Url::parse(DEFAULT_URL).expect("default url");
-            let state = BrowserState::new(event_loop, waker.clone(), url);
+            let state = BrowserState::new(event_loop, waker.clone());
             *self = Self::Running(state);
         }
     }
@@ -73,7 +70,7 @@ impl ApplicationHandler<WakerEvent> for BrowserApp {
             }
 
             // ── Maus ──────────────────────────────────────────────────────────
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::CursorMoved { position, .. } if !egui_consumed => {
                 state.handle_cursor_moved(position);
             }
 

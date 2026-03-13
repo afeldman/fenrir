@@ -7,62 +7,29 @@
 //! - Architektur: Ramo (MoE + GQA + QK-Norm + YaRN-RoPE)
 //! - Größe: 0.6B total / ~0.2B aktiv
 //! - Lizenz: Apache 2.0
-//! - Thinking Mode: `/think` → System-2 Reasoning
+//! - Thinking Mode: `<think>` → System-2 Reasoning
 //!
 //! # Nutzung
 //! ```ignore
-//! use fenrir_ai::{NoeumEngine, InferenceRequest, ThinkingConfig};
+//! use fenrir_ai::{NoeumEngine, InferenceRequest};
 //!
 //! let engine = NoeumEngine::load().await?;
 //! let response = engine.complete(InferenceRequest {
 //!     prompt: "Was ist Privacy?".into(),
-//!     thinking: Some(ThinkingConfig { budget_tokens: 128 }),
-//!     ..Default::default()
+//!     thinking: Some(()),
+//!     max_tokens: Some(128),
 //! }).await?;
 //! ```
 
+pub mod bookmarks;
 pub mod download;
 pub mod inference;
 pub mod model;
 pub mod tokenizer;
+pub mod noeum;
 
+pub use bookmarks::{BookmarkAnalysis, analyze_bookmark};
 pub use download::ModelDownloader;
-pub use inference::{InferenceRequest, InferenceResponse, ThinkingConfig};
+pub use inference::{InferenceRequest, InferenceResponse, InferenceEngine};
+pub use noeum::{NoeumEngine};
 
-use fenrir_core::error::FenrirError;
-use std::path::PathBuf;
-use tracing::info;
-
-/// Noeum-1-Nano Engine — Haupt-Einstiegspunkt.
-///
-/// Hält Modell + Tokenizer geladen. Thread-sicher (Arc<Mutex<>> intern).
-pub struct NoeumEngine {
-    inner: inference::InferenceEngine,
-}
-
-impl NoeumEngine {
-    /// Modell von HuggingFace laden (Download wenn nicht vorhanden).
-    pub async fn load() -> Result<Self, FenrirError> {
-        let downloader = ModelDownloader::new();
-        let model_dir = downloader.ensure_downloaded().await?;
-        Self::from_dir(model_dir).await
-    }
-
-    /// Aus lokalem Verzeichnis laden (kein Download).
-    pub async fn from_dir(dir: PathBuf) -> Result<Self, FenrirError> {
-        info!(dir = %dir.display(), "Lade Noeum-1-Nano Modell");
-        let inner = inference::InferenceEngine::load(dir).await?;
-        info!("Noeum-1-Nano geladen ✓");
-        Ok(Self { inner })
-    }
-
-    /// Text-Completion — mit optionalem Thinking Mode.
-    pub async fn complete(&mut self, request: InferenceRequest) -> Result<InferenceResponse, FenrirError> {
-        self.inner.complete(request).await
-    }
-
-    /// Ist das Modell im Speicher geladen?
-    pub fn is_loaded(&self) -> bool {
-        true
-    }
-}

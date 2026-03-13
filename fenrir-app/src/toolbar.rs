@@ -4,9 +4,8 @@
 //! über `ToolbarAction`-Rückgabewert zurück an BrowserState.
 
 use egui::{Frame, TopBottomPanel};
+use fenrir_i18n::t;
 use servo::LoadStatus;
-
-pub const TOOLBAR_HEIGHT_PX: f32 = 40.0;
 
 /// Aktionen die die Toolbar an den Browser zurückgibt.
 #[derive(Debug)]
@@ -35,7 +34,7 @@ impl ToolbarState {
         Self {
             url_input: initial_url.to_string(),
             current_url: initial_url.to_string(),
-            page_title: "Fenrir".to_string(),
+            page_title: t("app-name"),
             load_status: LoadStatus::Complete,
             can_go_back: false,
             can_go_forward: false,
@@ -56,7 +55,7 @@ impl ToolbarState {
 }
 
 /// Rendert die Toolbar. Gibt ToolbarAction zurück wenn der Nutzer etwas getan hat.
-pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context) -> ToolbarAction {
+pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context, toolbar_height: f32) -> ToolbarAction {
     let mut action = ToolbarAction::None;
 
     let frame = Frame::default()
@@ -65,7 +64,7 @@ pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context) -> ToolbarAction
 
     TopBottomPanel::top("fenrir_toolbar")
         .frame(frame)
-        .exact_height(TOOLBAR_HEIGHT_PX)
+        .exact_height(toolbar_height)
         .show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
                 // ← Back
@@ -100,7 +99,7 @@ pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context) -> ToolbarAction
                 let text_edit = egui::TextEdit::singleline(&mut ui_state.url_input)
                     .desired_width(ui.available_width() - 4.0)
                     .font(egui::TextStyle::Monospace)
-                    .hint_text("URL eingeben …");
+                    .hint_text(t("toolbar-url-hint"));
 
                 let resp = ui.add(text_edit);
 

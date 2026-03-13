@@ -1,0 +1,36 @@
+[package]
+name = "fenrir-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fenrir-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+
+# Offizielles MCP Rust SDK
+async-trait = "0.1"
+
+# Offizielles MCP Rust SDK
+rmcp = { version = "1.2", features = [
+    "client",
+    "server",
+    "transport-child-process",
+    "transport-io",
+] }
+
+# HTTP für Cloud-Provider (mammoth.ai etc.) — nur rustls, kein OpenSSL
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "stream",
+] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

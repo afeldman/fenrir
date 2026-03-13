@@ -1,0 +1,66 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "fenrir-app",
+    "crates/fenrir-core",
+    "crates/fenrir-servo",
+    "crates/fenrir-mcp",
+    "crates/fenrir-network",
+    "crates/fenrir-ai",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "EUPL-1.2"
+authors = ["Fenrir Contributors"]
+publish = false
+rust-version = "1.86.0"
+
+[workspace.dependencies]
+# Internal crates
+fenrir-core = { path = "crates/fenrir-core" }
+fenrir-servo = { path = "crates/fenrir-servo" }
+fenrir-mcp = { path = "crates/fenrir-mcp" }
+fenrir-network = { path = "crates/fenrir-network" }
+fenrir-ai = { path = "crates/fenrir-ai" }
+
+# Servo embedding API — git, kein lokaler Checkout nötig.
+# Beim Servo-Upgrade: tag + rust-toolchain.toml anpassen,
+# dann `cargo update -p servo` und resources/ aktualisieren.
+servo = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "libservo", default-features = false, features = [
+    "js_jit",
+    "background_hang_monitor",
+] }
+paint_api = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "paint_api" }
+embedder_traits = { git = "https://github.com/servo/servo", tag = "v0.0.5", package = "embedder_traits" }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging / Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Zeroize for secrets
+zeroize = { version = "1", features = ["derive"] }
+
+# URLs
+url = "2"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

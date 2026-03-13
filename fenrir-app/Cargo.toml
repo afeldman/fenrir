@@ -1,0 +1,43 @@
+[package]
+name = "fenrir-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fenrir"
+path = "src/main.rs"
+
+[dependencies]
+fenrir-core   = { workspace = true }
+fenrir-servo  = { workspace = true }
+fenrir-network = { workspace = true }
+tokio          = { workspace = true }
+tracing        = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow         = { workspace = true }
+url            = { workspace = true }
+
+# Windowing
+winit = "0.30.13"
+
+# UI — same versions as servoshell
+egui          = "0.33.3"
+egui_glow     = { version = "0.33.3", features = ["winit"] }
+egui-winit    = { version = "0.33.3", default-features = false }
+
+# Servo embedding API (via workspace, git-Dep)
+servo = { workspace = true }
+
+# Keyboard conversion
+keyboard-types = "0.8.3"
+
+# TLS crypto provider (required by Servo)
+rustls = { version = "0.23", features = ["aws-lc-rs"] }
+
+# Geometry types (re-exported from servo but needed directly)
+euclid = "0.22"
+
+# URL-Encoding für Suchmaschinen-Fallback
+urlencoding = "2"

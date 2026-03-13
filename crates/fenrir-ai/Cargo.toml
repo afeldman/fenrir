@@ -1,0 +1,39 @@
+[package]
+name = "fenrir-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = ["cpu"]
+cpu = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+metal = ["candle-core/metal", "candle-nn/metal"]
+
+[dependencies]
+fenrir-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Candle — HuggingFace Rust ML Framework
+candle-core = "0.9"
+candle-nn = "0.9"
+candle-transformers = "0.9"
+
+# Tokenizer — SentencePiece support
+tokenizers = { version = "0.21" }
+
+# Model Download von HuggingFace
+hf-hub = { version = "0.3", features = ["tokio"] }
+
+# Fortschrittsanzeige beim Download
+indicatif = "0.17"
+dirs = "5"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

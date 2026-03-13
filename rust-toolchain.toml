@@ -1,0 +1,5 @@
+[toolchain]
+# Pinned auf Servo v0.0.5 Toolchain.
+# Beim Upgrade auf neue Servo-Version hier anpassen.
+channel = "1.91.0"
+components = ["clippy", "rustfmt", "rust-src"]

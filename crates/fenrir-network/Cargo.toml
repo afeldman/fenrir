@@ -1,0 +1,37 @@
+[package]
+name = "fenrir-network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fenrir-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+async-trait = "0.1"
+
+# HTTP Stack — nur rustls, kein OpenSSL
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "stream",
+    "http2",
+] }
+
+# DNS-over-HTTPS / DNS-over-TLS
+hickory-resolver = { version = "0.26.0-beta.1", features = [
+    "https-ring",
+    "tls-ring",
+] }
+
+# Atomics für Bandwidth Monitor
+atomic_float = "1.1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+wiremock = "0.6"

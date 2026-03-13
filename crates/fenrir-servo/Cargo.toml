@@ -1,0 +1,25 @@
+[package]
+name = "fenrir-servo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fenrir-core = { workspace = true }
+fenrir-network = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+# Servo embedding API (via workspace, git-Dep)
+servo = { workspace = true }
+surfman = { version = "0.11.0", features = ["chains"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+paint_api = { workspace = true }
+embedder_traits = { workspace = true }
+dpi = "0.1"
+url = { workspace = true }

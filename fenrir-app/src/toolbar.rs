@@ -27,6 +27,7 @@ pub struct ToolbarState {
     pub can_go_back: bool,
     pub can_go_forward: bool,
     url_focused: bool,
+    request_focus: bool,
 }
 
 impl ToolbarState {
@@ -39,6 +40,7 @@ impl ToolbarState {
             can_go_back: false,
             can_go_forward: false,
             url_focused: false,
+            request_focus: false,
         }
     }
 
@@ -50,7 +52,7 @@ impl ToolbarState {
     }
 
     pub fn focus_url_bar(&mut self) {
-        self.url_focused = true;
+        self.request_focus = true;
     }
 }
 
@@ -96,20 +98,24 @@ pub fn render(ui_state: &mut ToolbarState, ctx: &egui::Context, toolbar_height: 
 
                 // URL-Bar
                 let url_id = egui::Id::new("url_bar");
+                
+                // Fokus setzen wenn angefordert
+                if ui_state.request_focus {
+                    ctx.memory_mut(|m| m.request_focus(url_id));
+                    ui_state.request_focus = false;
+                    ui_state.url_focused = true;
+                }
+                
                 let text_edit = egui::TextEdit::singleline(&mut ui_state.url_input)
                     .desired_width(ui.available_width() - 4.0)
                     .font(egui::TextStyle::Monospace)
-                    .hint_text(t("toolbar-url-hint"));
+                    .hint_text(t("toolbar-url-hint"))
+                    .id(url_id);
 
                 let resp = ui.add(text_edit);
 
                 // URL-Bar fokussiert?
                 ui_state.url_focused = resp.has_focus();
-
-                // Setzt Fokus wenn extern angefordert
-                if matches!(action, ToolbarAction::None) && ui_state.url_focused {
-                    ctx.memory_mut(|m| m.request_focus(url_id));
-                }
 
                 // Enter → navigieren
                 if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {

@@ -1,15 +1,23 @@
 [package]
-name = "fenrir-ui"
+name = "fenrir-tauri"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+
+[[bin]]
+name = "fenrir-tauri"
+path = "src/main.rs"
 
 [dependencies]
 fenrir-core = { workspace = true }
 fenrir-secure = { workspace = true }
 fenrir-sandbox = { workspace = true }
 fenrir-api = { workspace = true }
+fenrir-ui = { workspace = true }
+fenrir-config = { workspace = true }
+fenrir-log = { workspace = true }
+fenrir-i18n = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -18,17 +26,17 @@ serde_json = { workspace = true }
 url = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = "0.12"
-chrono = { workspace = true }
-uuid = { workspace = true }
+uuid = { version = "1.8", features = ["v4"] }
 
 # Tauri dependencies
-tauri = { workspace = true }
+tauri = "2.0"
+# Servo dependencies (for direct integration if needed)
+servo = { workspace = true }
+embedder_traits = { workspace = true }
 
-# UI dependencies
-egui = { version = "0.27", features = ["persistence"] }
-eframe = { version = "0.27", features = ["persistence"] }
-egui_extras = "0.27"
+[build-dependencies]
+tauri-build = { version = "2.0" }
 
-[dev-dependencies]
-tempfile = "3.10"
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+[features]
+default = []
+dev = ["tauri/dev"]

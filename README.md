@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/logo.png" alt="fenrir" width="500">
+  <img src="resources/fenrir_logo.png" alt="fenrir" width="500">
 </p>
 
 # Fenrir Browser

@@ -1,6 +1,6 @@
-use log::{info, warn, error};
+use log::{warn};
 use crate::models::{ErrorRecord, HelpSuggestion};
-use crate::error::ErrorManagementError;
+// use crate::error::ErrorManagementError;
 use crate::ErrorManagementResult;
 
 /// AI-Helper für die Generierung von Hilfe-Vorschlägen

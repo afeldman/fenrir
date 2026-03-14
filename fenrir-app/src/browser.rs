@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use egui_glow::EguiGlow;
+use egui_glow::glow::{self, HasContext};
 use euclid::Scale;
 use servo::{
     InputEvent, LoadStatus, MouseLeftViewportEvent, NavigationRequest, OffscreenRenderingContext,
@@ -26,7 +27,6 @@ use winit::window::Window;
 use fenrir_config;
 use crate::debug_panel::{self, DebugState, ServoEvent};
 use crate::input;
-use crate::logging;
 use crate::toolbar::{self, ToolbarAction, ToolbarState};
 use crate::waker::FenrirWaker;
 use fenrir_i18n::{t, t_with_args};
@@ -70,7 +70,9 @@ impl BrowserState {
             },
             Err(e) => {
                 tracing::warn!("Ungültige Start-URL in Konfiguration: {}, Fehler: {}, verwende Standard", config.ui.start_url, e);
-                let default_url = Url::parse(&config.ui.start_url).unwrap();
+                // Verwende eine Standard-URL
+                let default_url = Url::parse("file:///Users/anton.feldmann/Projects/priv/browser/test_minimal.html")
+                    .expect("Standard-URL sollte gültig sein");
                 tracing::debug!("Verwende Standard-URL: {}", default_url);
                 default_url
             }
@@ -84,9 +86,11 @@ impl BrowserState {
         let window = event_loop
             .create_window(
                 Window::default_attributes()
-                    .with_title("Fenrir")
+                    .with_title("Fenrir Browser")
                     .with_inner_size(PhysicalSize::new(config.ui.window_width, config.ui.window_height))
-                    .with_window_icon(window_icon),
+                    .with_window_icon(window_icon)
+                    .with_visible(true)
+                    .with_active(true),
             )
             .expect("Window konnte nicht erstellt werden");
 
@@ -144,6 +148,16 @@ impl BrowserState {
 
         state.servo.set_delegate(Rc::new(FenrirServoDelegate));
 
+        // WICHTIG: Stelle sicher, dass der Servo-Kontext current ist, bevor die WebView erstellt wird
+        state.servo_ctx.make_current().expect("servo_ctx make_current vor WebView-Erstellung");
+        
+        // Debug: Überprüfe den Servo-Kontext
+        trace!("Servo Context Größe: {:?}", state.servo_ctx.size());
+        
+        // WICHTIG: Servo braucht Zeit, um den Framebuffer zu initialisieren
+        // Wir geben Servo eine kurze Pause, bevor wir die WebView erstellen
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        
         let webview = WebViewBuilder::new(
             &state.servo,
             state.servo_ctx.clone() as Rc<dyn RenderingContext>,
@@ -154,6 +168,14 @@ impl BrowserState {
         .build();
 
         *state.webview.borrow_mut() = Some(webview);
+        
+        // WICHTIG: Nach der WebView-Erstellung Servo Zeit geben, um zu initialisieren
+        info!("WebView erstellt, warte auf Servo-Initialisierung...");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
+        // Jetzt einen Redraw anfordern
+        info!("Fordere initialen Redraw an...");
+        state.request_redraw();
         
         info!("Browser gestartet mit URL: {}", initial_url);
         trace!("BrowserState vollständig initialisiert");
@@ -168,10 +190,10 @@ impl BrowserState {
         self.window.request_redraw();
     }
     
-    /// Request redraw with frame rate limiting (max 60 FPS)
+    /// Request redraw with frame rate limiting (max 30 FPS for automatic updates)
     /// This is only used for automatic redraws from Servo's notify_new_frame_ready
     fn request_redraw_limited(&self) {
-        const MIN_FRAME_TIME: std::time::Duration = std::time::Duration::from_millis(16); // ~60 FPS
+        const MIN_FRAME_TIME: std::time::Duration = std::time::Duration::from_millis(33); // ~30 FPS
         
         let now = std::time::Instant::now();
         let time_since_last_redraw = now.duration_since(self.last_redraw_time.get());
@@ -192,6 +214,38 @@ impl BrowserState {
         // Offscreen-Kontext current setzen (Servo rendert dorthin),
         // dann Window-Kontext für egui/blit vorbereiten — Reihenfolge wie in servoshell.
         self.servo_ctx.make_current().expect("servo_ctx make_current");
+        
+        // WICHTIG: Stelle sicher, dass der Framebuffer initialisiert ist
+        // Servo benötigt einen initialisierten Framebuffer, um darauf zu rendern
+        unsafe {
+            let gl = self.servo_ctx.glow_gl_api();
+            
+            // Framebuffer-Bindung überprüfen
+            let current_fbo = gl.get_parameter_i32(glow::FRAMEBUFFER_BINDING);
+            trace!("Aktueller Framebuffer vor Clear: {}", current_fbo);
+            
+            // Framebuffer-Status überprüfen
+            let status = gl.check_framebuffer_status(glow::FRAMEBUFFER);
+            trace!("Framebuffer Status vor Clear: {:?}", status);
+            
+            // Nur clearen, wenn der Framebuffer gültig ist
+            if status == glow::FRAMEBUFFER_COMPLETE {
+                gl.clear_color(1.0, 1.0, 1.0, 1.0); // Weißer Hintergrund
+                gl.clear(glow::COLOR_BUFFER_BIT);
+                trace!("Framebuffer erfolgreich geclert");
+            } else {
+                warn!("Framebuffer ist nicht komplett! Status: {:?}", status);
+                // Versuche, den Default-Framebuffer (0) zu binden
+                gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+                trace!("Default Framebuffer gebunden");
+            }
+            
+            let error = gl.get_error();
+            if error != glow::NO_ERROR {
+                warn!("OpenGL-Fehler nach Framebuffer-Initialisierung: {:?}", error);
+            }
+        }
+        
         self.window_ctx.prepare_for_rendering();
 
         let mut nav_url: Option<String> = None;
@@ -209,40 +263,101 @@ impl BrowserState {
 
             // Box<dyn Fn> in Arc wrappen damit der Callback in egui-Closures geclont werden kann
             type BlitFn = dyn Fn(&egui_glow::glow::Context, euclid::default::Rect<i32>) + Send + Sync;
+            
+            // Debug: Überprüfe den Framebuffer-Status
+            trace!("Vor render_to_parent_callback()");
             let blit_callback: Option<Arc<BlitFn>> = servo_ctx
                 .render_to_parent_callback()
-                .map(|b| Arc::from(b) as Arc<BlitFn>);
-            let blit_is_some = blit_callback.is_some();
-            dbg.record_render(blit_is_some);
-            
-            trace!("Blit-Callback verfügbar: {}", blit_is_some);
+                .map(|b| {
+                    trace!("render_to_parent_callback() gab einen Callback zurück!");
+                    Arc::from(b) as Arc<BlitFn>
+                });
+
+            info!("Beginne egui Frame");
 
             egui.run(&self.window, |ctx| {
+                debug!("Egui-Frame gestartet");
+                debug!("Egui Context: {:?}", ctx);
+
                 if let Some(blit) = &blit_callback {
                     let blit = blit.clone(); // Arc::clone — billig
-                    let screen = ctx.screen_rect();
+                    let screen = ctx.content_rect(); // Use content_rect instead of deprecated screen_rect
+                    
+                    // Sicherstellen, dass die Höhe nicht negativ ist
+                    let webview_height = (screen.height() - self.config.ui.toolbar_height).max(0.0);
+                    
                     let webview_rect = egui::Rect::from_min_size(
                         egui::pos2(0.0, self.config.ui.toolbar_height),
-                        egui::vec2(screen.width(), screen.height() - self.config.ui.toolbar_height),
+                        egui::vec2(screen.width(), webview_height),
                     );
-                    ctx.layer_painter(egui::LayerId::background()).add(
+                    
+                    trace!("WebView Rect: {:?}", webview_rect);
+                    
+                    trace!("Erstelle Blit-Callback...");
+                    // Korrigierter Blit-Callback
+                    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("webview_blit"))).add(
                         egui::PaintCallback {
                             rect: webview_rect,
                             callback: Arc::new(egui_glow::CallbackFn::new(
                                 move |info, painter| {
+                                    // Einfache Debug-Ausgabe in Datei schreiben
+                                    let _ = std::fs::write("/tmp/fenrir_callback_debug.txt", "Callback wird aufgerufen\n");
+
                                     let clip = info.viewport_in_pixels();
-                                    let target = euclid::default::Rect::new(
-                                        euclid::default::Point2D::new(clip.left_px, clip.from_bottom_px),
-                                        euclid::default::Size2D::new(clip.width_px, clip.height_px),
+                                    
+                                    // Debug-Info in Datei schreiben
+                                    let debug_info = format!(
+                                        "Clip: left_px={}, from_bottom_px={}, width_px={}, height_px={}\n",
+                                        clip.left_px, clip.from_bottom_px, clip.width_px, clip.height_px
                                     );
-                                    trace!("Blit aufgerufen: {:?}", target);
+                                    let _ = std::fs::write("/tmp/fenrir_clip_debug.txt", &debug_info);
+                                    
+                                    // Sicherstellen, dass die Koordinaten gültig sind
+                                    let x = clip.left_px.max(0);
+                                    let y = clip.from_bottom_px.max(0);
+                                    let width = clip.width_px.max(0);
+                                    let height = clip.height_px.max(0);
+                                    
+                                    // Target Rect mit validierten Werten erstellen
+                                    let target = euclid::default::Rect::new(
+                                        euclid::default::Point2D::new(x, y),
+                                        euclid::default::Size2D::new(width, height),
+                                    );
+                                    
+                                    // Debug: Target-Info speichern
+                                    let target_info = format!("Target: {:?}\n", target);
+                                    let _ = std::fs::write("/tmp/fenrir_target_debug.txt", &target_info);
+                                    
+                                    // Einfache Test-Zeichnung: Halbtransparentes Blau, damit Servo-Inhalte sichtbar sind
+                                    let gl = painter.gl();
+                                    unsafe {
+                                        // Scissor auf den Viewport setzen
+                                        gl.enable(glow::SCISSOR_TEST);
+                                        gl.scissor(x, y, width as i32, height as i32);
+                                        
+                                        // Halbtransparentes Blau zeichnen (50% transparent)
+                                        // Das lässt Servo-Inhalte durchscheinen, falls sie vorhanden sind
+                                        gl.clear_color(0.0, 0.0, 1.0, 0.5); // Halbtransparentes Blau
+                                        gl.clear(glow::COLOR_BUFFER_BIT);
+                                        
+                                        gl.disable(glow::SCISSOR_TEST);
+                                        
+                                        // OpenGL-Fehler überprüfen
+                                        let error = gl.get_error();
+                                        if error != glow::NO_ERROR {
+                                            let _ = std::fs::write("/tmp/fenrir_opengl_error.txt", format!("OpenGL-Fehler: {:?}\n", error));
+                                        }
+                                    }
+                                    
+                                    // Versuche den Blit (Servo's Inhalt auf den Bildschirm kopieren)
                                     blit(painter.gl(), target);
+                                    let _ = std::fs::write("/tmp/fenrir_blit_success.txt", "Blit aufgerufen\n");
                                 },
                             )),
                         },
                     );
                 } else {
-                    trace!("Kein Blit-Callback verfügbar - weißes Canvas?");
+                    trace!("Kein Blit-Callback verfügbar - weißes Canvas");
                 }
 
                 match toolbar::render(&mut toolbar, ctx, self.config.ui.toolbar_height) {
@@ -276,6 +391,9 @@ impl BrowserState {
         if focus_url { 
             trace!("Fokussiere URL-Bar");
             self.toolbar.borrow_mut().focus_url_bar(); 
+            // Wir müssen einen Redraw anfordern, damit die Toolbar neu gerendert wird
+            // und der Fokus gesetzt werden kann
+            self.request_redraw();
         }
 
         egui.paint(&self.window);
@@ -480,6 +598,13 @@ impl WebViewDelegate for BrowserState {
         if status == LoadStatus::Complete {
             toolbar.can_go_back = wv.can_go_back();
             toolbar.can_go_forward = wv.can_go_forward();
+            
+            // Nachdem die Seite geladen ist, einen Redraw anfordern
+            // Das könnte helfen, den Framebuffer zu initialisieren
+            info!("Seite vollständig geladen! Fordere Redraw an...");
+            self.request_redraw();
+        } else if status == LoadStatus::Started {
+            info!("Seite wird geladen...");
         }
     }
 
@@ -505,11 +630,13 @@ fn load_window_icon() -> Option<winit::window::Icon> {
     use std::fs;
     use winit::window::Icon;
     
-    // Versuche verschiedene Icon-Pfade
+    // Versuche verschiedene Icon-Pfade (Priorität: ICO > PNG > Fallbacks)
     let icon_paths = [
-        // Primärer Pfad: img/ Ordner
-        "img/fenrir.ico",
-        "img/icon.png",
+        // Primäres ICO-Icon
+        "resources/fenrir.ico",
+        // PNG-Icons (die tatsächlich existieren)
+        "resources/fenrir.png",
+        "resources/logo.png",
         // Fallback: resources/ Ordner
         "resources/servo.ico",
         "resources/servo.icns",
@@ -518,20 +645,36 @@ fn load_window_icon() -> Option<winit::window::Icon> {
     
     for path in &icon_paths {
         if let Ok(bytes) = fs::read(path) {
-            match Icon::from_rgba(bytes, 0, 0) {
-                Ok(icon) => {
-                    tracing::debug!("Icon geladen von: {}", path);
-                    return Some(icon);
-                }
-                Err(e) => {
-                    tracing::warn!("Konnte Icon von {} nicht laden: {}", path, e);
-                    // Versuche es mit ICO-Parser für .ico Dateien
-                    if path.ends_with(".ico") {
-                        if let Ok(icon) = load_ico_file(path) {
-                            tracing::debug!("ICO Icon geladen von: {}", path);
-                            return Some(icon);
-                        }
+            // Versuche zuerst mit spezifischen Parsern
+            if path.ends_with(".png") {
+                match load_png_file(path) {
+                    Ok(icon) => {
+                        tracing::debug!("PNG Icon geladen von: {}", path);
+                        return Some(icon);
                     }
+                    Err(_) => {
+                        // PNG-Parser fehlgeschlagen, weiter zum nächsten
+                    }
+                }
+            }
+            
+            if path.ends_with(".ico") {
+                match load_ico_file(path) {
+                    Ok(icon) => {
+                        tracing::debug!("ICO Icon geladen von: {}", path);
+                        return Some(icon);
+                    }
+                    Err(_) => {
+                        // ICO-Parser fehlgeschlagen, weiter zum nächsten
+                    }
+                }
+            }
+            
+            // Fallback: Versuche direkte Methode (nur für PNG mit 64x64)
+            if path.ends_with(".png") {
+                if let Ok(icon) = Icon::from_rgba(bytes, 64, 64) {
+                    tracing::debug!("Icon direkt geladen von: {}", path);
+                    return Some(icon);
                 }
             }
         }
@@ -541,21 +684,96 @@ fn load_window_icon() -> Option<winit::window::Icon> {
     None
 }
 
+/// Lädt eine PNG-Datei und konvertiert sie in ein winit Icon
+fn load_png_file(path: &str) -> Result<winit::window::Icon, Box<dyn std::error::Error>> {
+    use image::ImageReader;
+    use image::GenericImageView;
+    
+    tracing::debug!("Versuche PNG-Datei zu laden: {}", path);
+    
+    // Verwende ImageReader, der automatisch das Format erkennt
+    let img = match ImageReader::open(path) {
+        Ok(reader) => match reader.with_guessed_format() {
+            Ok(reader_with_format) => match reader_with_format.decode() {
+                Ok(img) => img,
+                Err(e) => {
+                    tracing::error!("Fehler beim Dekodieren von PNG: {}", e);
+                    return Err(Box::new(e));
+                }
+            },
+            Err(e) => {
+                tracing::error!("Fehler beim Erraten des Formats: {}", e);
+                return Err(Box::new(e));
+            }
+        },
+        Err(e) => {
+            tracing::error!("Fehler beim Öffnen der Datei: {}", e);
+            return Err(Box::new(e));
+        }
+    };
+    
+    let (width, height) = img.dimensions();
+    tracing::debug!("PNG Dimensionen: {}x{}", width, height);
+    
+    // Konvertiere zu RGBA
+    let rgba = img.to_rgba8();
+    tracing::debug!("PNG Daten konvertiert: {} Bytes", rgba.len());
+    
+    match winit::window::Icon::from_rgba(rgba.to_vec(), width, height) {
+        Ok(icon) => {
+            tracing::debug!("PNG Icon erfolgreich erstellt");
+            Ok(icon)
+        },
+        Err(e) => {
+            tracing::error!("Fehler beim Erstellen des Icons: {}", e);
+            Err(Box::new(e))
+        }
+    }
+}
+
 /// Lädt eine ICO-Datei und konvertiert sie in ein winit Icon
 fn load_ico_file(path: &str) -> Result<winit::window::Icon, Box<dyn std::error::Error>> {
-    use std::fs::File;
-    use std::io::BufReader;
+    use image::ImageReader;
+    use image::GenericImageView;
     
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
+    tracing::debug!("Versuche ICO-Datei zu laden: {}", path);
     
-    // Einfache ICO-Parsing-Logik
-    // In einer echten Implementierung würde man eine ICO-Parsing-Bibliothek verwenden
-    let bytes = std::fs::read(path)?;
+    // Verwende ImageReader, der automatisch das Format erkennt
+    let img = match ImageReader::open(path) {
+        Ok(reader) => match reader.with_guessed_format() {
+            Ok(reader_with_format) => match reader_with_format.decode() {
+                Ok(img) => img,
+                Err(e) => {
+                    tracing::error!("Fehler beim Dekodieren von ICO: {}", e);
+                    return Err(Box::new(e));
+                }
+            },
+            Err(e) => {
+                tracing::error!("Fehler beim Erraten des Formats: {}", e);
+                return Err(Box::new(e));
+            }
+        },
+        Err(e) => {
+            tracing::error!("Fehler beim Öffnen der Datei: {}", e);
+            return Err(Box::new(e));
+        }
+    };
     
-    // Für .ico Dateien müssen wir sie möglicherweise anders parsen
-    // Da winit::window::Icon::from_rgba PNG/RGBA erwartet, aber ICO ein anderes Format ist
-    // Wir geben einfach die rohen Bytes zurück und lassen winit es versuchen
-    winit::window::Icon::from_rgba(bytes, 0, 0)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    let (width, height) = img.dimensions();
+    tracing::debug!("ICO Dimensionen: {}x{}", width, height);
+    
+    // Konvertiere zu RGBA
+    let rgba = img.to_rgba8();
+    tracing::debug!("ICO Daten konvertiert: {} Bytes", rgba.len());
+    
+    match winit::window::Icon::from_rgba(rgba.to_vec(), width, height) {
+        Ok(icon) => {
+            tracing::debug!("ICO Icon erfolgreich erstellt");
+            Ok(icon)
+        },
+        Err(e) => {
+            tracing::error!("Fehler beim Erstellen des Icons: {}", e);
+            Err(Box::new(e))
+        }
+    }
 }

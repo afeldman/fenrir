@@ -7,10 +7,12 @@ authors.workspace = true
 
 [dependencies]
 fenrir-core = { workspace = true }
-fenrir-metrics = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+glow = { workspace = true }
+euclid = { workspace = true }
+winit = { workspace = true }
 
 # Servo embedding API
 servo = { workspace = true }

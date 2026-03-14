@@ -47,3 +47,6 @@ urlencoding = "2"
 
 # Platform-specific directories
 dirs = "5"
+
+# Image processing for icons
+image = "0.25"

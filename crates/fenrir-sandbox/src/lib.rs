@@ -12,7 +12,6 @@ mod window;
 pub use instance::{ServoInstance, ServoInstanceConfig, InstanceEvent, InstanceManager};
 pub use window::{SandboxWindow, WindowConfig};
 
-use crate::instance::InstanceManager;
 use fenrir_secure::{SecurityManager, Origin};
 use std::sync::Arc;
 use tauri::Window;
@@ -56,7 +55,7 @@ impl SandboxManager {
         let window = self.create_sandbox_window(app_handle, &instance_id, window_config)?;
         
         // Create Servo instance
-        let mut instance = ServoInstance::new(
+        let instance = ServoInstance::new(
             instance_id.clone(),
             origin.clone(),
             url,
@@ -97,85 +96,81 @@ impl SandboxManager {
         Ok(())
     }
 
-    /// Get a Servo instance by ID
-    pub fn get_instance(&self, instance_id: &str) -> Option<ServoInstance> {
-        self.instance_manager.get_instance(instance_id)
+    /// Get a Servo instance by ID and execute a closure with it
+    pub fn with_instance<F, R>(&self, instance_id: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&ServoInstance) -> R,
+    {
+        self.instance_manager.instances().get(instance_id).map(f)
     }
 
-    /// Get all active instances
-    pub fn get_all_instances(&self) -> Vec<ServoInstance> {
-        self.instance_manager.get_all_instances()
+    /// Get a mutable Servo instance by ID and execute a closure with it
+    pub fn with_instance_mut<F, R>(&self, instance_id: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut ServoInstance) -> R,
+    {
+        self.instance_manager.instances_mut().get_mut(instance_id).map(f)
+    }
+
+    /// Execute a closure with all instances
+    pub fn with_all_instances<F, R>(&self, f: F) -> Vec<R>
+    where
+        F: Fn(&ServoInstance) -> R,
+    {
+        self.instance_manager.instances().values().map(f).collect()
     }
 
     /// Navigate an instance to a new URL
     pub fn navigate_instance(&self, instance_id: &str, url: Url) -> Result<(), SandboxError> {
-        let mut instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        // Update origin if needed
-        if let Some(new_origin) = Origin::from_url(&url) {
-            // Update security manager with new origin
-            self.security_manager.register_servo_instance(
-                instance_id.to_string(),
-                new_origin,
-                instance.servo().clone(),
-            );
-        }
-        
-        instance.navigate(url)
+        self.with_instance_mut(instance_id, |instance| {
+            // Update origin if needed
+            if let Some(new_origin) = Origin::from_url(&url) {
+                // Update security manager with new origin
+                self.security_manager.register_servo_instance(
+                    instance_id.to_string(),
+                    new_origin,
+                    instance.servo().clone(),
+                );
+            }
+            
+            instance.navigate(url)
+        })
+        .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Reload an instance
     pub fn reload_instance(&self, instance_id: &str) -> Result<(), SandboxError> {
-        let instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        instance.reload()
+        self.with_instance(instance_id, |instance| instance.reload())
+            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Go back in instance history
     pub fn go_back_instance(&self, instance_id: &str) -> Result<(), SandboxError> {
-        let instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        instance.go_back()
+        self.with_instance(instance_id, |instance| instance.go_back())
+            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Go forward in instance history
     pub fn go_forward_instance(&self, instance_id: &str) -> Result<(), SandboxError> {
-        let instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        instance.go_forward()
+        self.with_instance(instance_id, |instance| instance.go_forward())
+            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Stop loading in instance
     pub fn stop_instance(&self, instance_id: &str) -> Result<(), SandboxError> {
-        let instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        instance.stop()
+        self.with_instance(instance_id, |instance| instance.stop())
+            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Execute JavaScript in instance
     pub fn execute_script_instance(&self, instance_id: &str, script: &str) -> Result<(), SandboxError> {
-        let instance = self.instance_manager
-            .get_instance_mut(instance_id)
-            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?;
-        
-        instance.execute_script(script)
+        self.with_instance(instance_id, |instance| instance.execute_script(script))
+            .ok_or(SandboxError::InstanceNotFound(instance_id.to_string()))?
     }
 
     /// Process events for all instances (should be called from main loop)
     pub fn process_events(&self) {
-        for instance in self.instance_manager.get_all_instances() {
-            instance.process_events();
-        }
+        self.with_all_instances(|instance| instance.process_events());
     }
 
     /// Create a sandboxed Tauri window for a Servo instance
@@ -184,14 +179,14 @@ impl SandboxManager {
         app_handle: &tauri::AppHandle,
         instance_id: &str,
         config: WindowConfig,
-    ) -> Result<Window, SandboxError> {
+    ) -> Result<tauri::WebviewWindow, SandboxError> {
         let window_label = format!("servo-{}", instance_id);
         
         // Create window with sandboxing features
-        let window = tauri::WindowBuilder::new(
+        let window = tauri::WebviewWindowBuilder::new(
             app_handle,
             window_label,
-            tauri::WindowUrl::App("index.html".into()),
+            tauri::WebviewUrl::App("index.html".into()),
         )
         .title(&config.title)
         .inner_size(config.width, config.height)
@@ -201,7 +196,7 @@ impl SandboxManager {
         .always_on_top(config.always_on_top)
         .visible(false) // Start hidden, show after Servo is initialized
         .build()
-        .map_err(|e| SandboxError::WindowCreation(e.to_string()))?;
+        .map_err(|e: tauri::Error| SandboxError::WindowCreation(e.to_string()))?;
         
         // Configure window for sandboxing
         // Disable devtools for security in release builds
@@ -219,34 +214,34 @@ impl SandboxManager {
             InstanceEvent::TitleChanged(title) => {
                 info!("Instance {} title changed to: {:?}", instance_id, title);
                 // Update window title
-                if let Some(instance) = self.instance_manager.get_instance(instance_id) {
+                self.with_instance(instance_id, |instance| {
                     if let Err(e) = instance.window().set_title(&title.unwrap_or_default()) {
                         error!("Failed to update window title: {}", e);
                     }
-                }
+                });
             }
             InstanceEvent::UrlChanged(url) => {
                 info!("Instance {} URL changed to: {}", instance_id, url);
                 // Update security manager with new origin if needed
                 if let Some(origin) = Origin::from_url(&url) {
-                    if let Some(instance) = self.instance_manager.get_instance(instance_id) {
+                    self.with_instance(instance_id, |instance| {
                         self.security_manager.register_servo_instance(
                             instance_id.to_string(),
-                            origin,
+                            origin.clone(),
                             instance.servo().clone(),
                         );
-                    }
+                    });
                 }
             }
             InstanceEvent::LoadStatusChanged(status) => {
                 info!("Instance {} load status: {:?}", instance_id, status);
                 // Show window when loading starts
-                if let Some(instance) = self.instance_manager.get_instance(instance_id) {
-                    if matches!(status, servo::LoadStatus::Started) {
+                if matches!(status, servo::LoadStatus::Started) {
+                    self.with_instance(instance_id, |instance| {
                         if let Err(e) = instance.window().show() {
                             error!("Failed to show window: {}", e);
                         }
-                    }
+                    });
                 }
             }
             InstanceEvent::PermissionRequest(request) => {

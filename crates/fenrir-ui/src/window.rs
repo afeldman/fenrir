@@ -1,15 +1,15 @@
 //! Window management
 
-use tauri::{AppHandle, Window, WindowBuilder, WindowUrl};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use thiserror::Error;
 use tracing::{info, error};
 
 /// Manages all application windows
 pub struct WindowManager {
     app_handle: AppHandle,
-    main_window: Option<Window>,
-    settings_window: Option<Window>,
-    permissions_window: Option<Window>,
+    main_window: Option<WebviewWindow>,
+    settings_window: Option<WebviewWindow>,
+    permissions_window: Option<WebviewWindow>,
 }
 
 impl WindowManager {
@@ -31,10 +31,10 @@ impl WindowManager {
             return Err(WindowError::WindowAlreadyExists("main".to_string()));
         }
         
-        let window = WindowBuilder::new(
+        let window = WebviewWindowBuilder::new(
             &self.app_handle,
             "main",
-            WindowUrl::App("index.html".into()),
+            WebviewUrl::App("index.html".into()),
         )
         .title("Fenrir Browser")
         .inner_size(1200.0, 800.0)
@@ -43,7 +43,7 @@ impl WindowManager {
         .decorations(true)
         .visible(true)
         .build()
-        .map_err(|e| WindowError::Creation(e.to_string()))?;
+        .map_err(|e: tauri::Error| WindowError::Creation(e.to_string()))?;
         
         self.main_window = Some(window);
         
@@ -64,10 +64,10 @@ impl WindowManager {
             return Ok(());
         }
         
-        let window = WindowBuilder::new(
+        let window = WebviewWindowBuilder::new(
             &self.app_handle,
             "settings",
-            WindowUrl::App("settings.html".into()),
+            WebviewUrl::App("settings.html".into()),
         )
         .title("Fenrir Settings")
         .inner_size(800.0, 600.0)
@@ -76,7 +76,7 @@ impl WindowManager {
         .decorations(true)
         .visible(true)
         .build()
-        .map_err(|e| WindowError::Creation(e.to_string()))?;
+        .map_err(|e: tauri::Error| WindowError::Creation(e.to_string()))?;
         
         self.settings_window = Some(window);
         
@@ -97,10 +97,10 @@ impl WindowManager {
             return Ok(());
         }
         
-        let window = WindowBuilder::new(
+        let window = WebviewWindowBuilder::new(
             &self.app_handle,
             "permissions",
-            WindowUrl::App("permissions.html".into()),
+            WebviewUrl::App("permissions.html".into()),
         )
         .title("Fenrir Permissions")
         .inner_size(600.0, 400.0)
@@ -109,7 +109,7 @@ impl WindowManager {
         .decorations(true)
         .visible(true)
         .build()
-        .map_err(|e| WindowError::Creation(e.to_string()))?;
+        .map_err(|e: tauri::Error| WindowError::Creation(e.to_string()))?;
         
         self.permissions_window = Some(window);
         
@@ -119,7 +119,7 @@ impl WindowManager {
     }
     
     /// Get main window
-    pub fn main_window(&self) -> Option<&Window> {
+    pub fn main_window(&self) -> Option<&WebviewWindow> {
         self.main_window.as_ref()
     }
     
@@ -136,12 +136,9 @@ impl WindowManager {
     
     /// Show notification
     pub fn show_notification(&self, title: &str, message: &str) -> Result<(), WindowError> {
-        // Use Tauri's notification API
-        tauri::api::notification::Notification::new(&self.app_handle.config().tauri.bundle.identifier)
-            .title(title)
-            .body(message)
-            .show()
-            .map_err(|e| WindowError::Notification(e.to_string()))?;
+        // TODO: Implement notification in Tauri 2.0
+        // Tauri 2.0 has changed the notification API
+        info!("Notification: {} - {}", title, message);
         
         Ok(())
     }
@@ -175,17 +172,17 @@ impl WindowManager {
 
 /// Main browser window wrapper
 pub struct MainWindow {
-    window: Window,
+    window: WebviewWindow,
 }
 
 impl MainWindow {
     /// Create new main window wrapper
-    pub fn new(window: Window) -> Self {
+    pub fn new(window: WebviewWindow) -> Self {
         Self { window }
     }
     
     /// Get underlying window
-    pub fn inner(&self) -> &Window {
+    pub fn inner(&self) -> &WebviewWindow {
         &self.window
     }
     
@@ -197,7 +194,7 @@ impl MainWindow {
     
     /// Set window size
     pub fn set_size(&self, width: f64, height: f64) -> Result<(), WindowError> {
-        self.window.set_size(tauri::PhysicalSize::new(width as u32, height as u32))
+        self.window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(width as u32, height as u32)))
             .map_err(|e| WindowError::Update(e.to_string()))
     }
     

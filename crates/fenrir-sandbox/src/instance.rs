@@ -1,13 +1,9 @@
 //! Servo instance management
 
 use crate::window::SandboxWindow;
-use embedder_traits::PermissionRequest;
 use fenrir_secure::Origin;
-use fenrir_servo::FenrirHost;
 use parking_lot::RwLock;
-use servo::{LoadStatus, WebView, WebViewDelegate, Servo, ServoBuilder, WebViewBuilder};
-use servo::glutin::surface::GlSurface;
-use servo::glutin::display::Display;
+use servo::{LoadStatus, WebView, WebViewDelegate, Servo, ServoBuilder, WebViewBuilder, PermissionRequest};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -57,7 +53,7 @@ pub struct ServoInstance {
     /// Current URL
     url: Url,
     /// Tauri window
-    window: Window,
+    window: tauri::WebviewWindow,
     /// Servo instance
     servo: Arc<Servo>,
     /// WebView for this instance
@@ -74,7 +70,7 @@ impl ServoInstance {
         id: String,
         origin: Origin,
         url: Url,
-        window: Window,
+        window: tauri::WebviewWindow,
         event_handler: Option<Box<dyn Fn(InstanceEvent) + Send + Sync>>,
     ) -> Result<Self, crate::SandboxError> {
         info!("Initializing Servo instance {} for {}", id, url);
@@ -83,8 +79,7 @@ impl ServoInstance {
         let delegate = Rc::new(SandboxServoDelegate::new(id.clone()));
         
         let servo = ServoBuilder::default()
-            .build()
-            .map_err(|e| crate::SandboxError::ServoInit(e.to_string()))?;
+            .build();
         
         servo.set_delegate(delegate);
         
@@ -103,24 +98,23 @@ impl ServoInstance {
     }
     
     /// Create and initialize WebView for this instance
-    pub fn create_webview(&mut self, display: &Display) -> Result<(), crate::SandboxError> {
+    pub fn create_webview(&mut self) -> Result<(), crate::SandboxError> {
         info!("Creating WebView for instance {}", self.id);
         
         // Create rendering context
-        let rendering_context = self.create_rendering_context(display)?;
+        let rendering_context = self.create_rendering_context()?;
         
         // Create WebView delegate
         let webview_delegate = Rc::new(SandboxWebViewDelegate::new(
             self.id.clone(),
-            self.event_handler.clone(),
+            self.event_handler.take(),
         ));
         
         // Create WebView
         let webview = WebViewBuilder::new(&self.servo, rendering_context)
             .url(self.url.clone())
             .delegate(webview_delegate)
-            .build()
-            .map_err(|e| crate::SandboxError::ServoInit(e.to_string()))?;
+            .build();
         
         self.webview = Some(webview);
         
@@ -158,7 +152,7 @@ impl ServoInstance {
         info!("Going back in instance {}", self.id);
         
         if let Some(webview) = &self.webview {
-            webview.go_back();
+            webview.go_back(1); // Go back one page
         }
         
         Ok(())
@@ -169,7 +163,7 @@ impl ServoInstance {
         info!("Going forward in instance {}", self.id);
         
         if let Some(webview) = &self.webview {
-            webview.go_forward();
+            webview.go_forward(1); // Go forward one page
         }
         
         Ok(())
@@ -218,7 +212,7 @@ impl ServoInstance {
     }
     
     /// Get the Tauri window
-    pub fn window(&self) -> &Window {
+    pub fn window(&self) -> &tauri::WebviewWindow {
         &self.window
     }
     
@@ -255,7 +249,7 @@ impl ServoInstance {
     }
     
     /// Create rendering context for Servo
-    fn create_rendering_context(&self, display: &Display) -> Result<Rc<dyn servo::RenderingContext>, crate::SandboxError> {
+    fn create_rendering_context(&self) -> Result<Rc<dyn servo::RenderingContext>, crate::SandboxError> {
         // This is a simplified implementation
         // In a real implementation, we would create a proper GL context
         
@@ -357,7 +351,6 @@ impl WebViewDelegate for SandboxWebViewDelegate {
 }
 
 /// Events from Servo instances
-#[derive(Debug)]
 pub enum InstanceEvent {
     /// Page title changed
     TitleChanged(Option<String>),
@@ -371,6 +364,19 @@ pub enum InstanceEvent {
     PermissionRequest(PermissionRequest),
     /// Other custom events
     Custom(String, serde_json::Value),
+}
+
+impl std::fmt::Debug for InstanceEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstanceEvent::TitleChanged(title) => write!(f, "TitleChanged({:?})", title),
+            InstanceEvent::UrlChanged(url) => write!(f, "UrlChanged({})", url),
+            InstanceEvent::LoadStatusChanged(status) => write!(f, "LoadStatusChanged({:?})", status),
+            InstanceEvent::NavigationRequest(_) => write!(f, "NavigationRequest(...)"),
+            InstanceEvent::PermissionRequest(_) => write!(f, "PermissionRequest(...)"),
+            InstanceEvent::Custom(name, data) => write!(f, "Custom({}, {:?})", name, data),
+        }
+    }
 }
 
 /// Manager for multiple Servo instances
@@ -392,21 +398,14 @@ impl InstanceManager {
         self.instances.write().insert(id, instance);
     }
     
-    /// Get an instance by ID
-    pub fn get_instance(&self, id: &str) -> Option<ServoInstance> {
-        self.instances.read().get(id).cloned()
+    /// Get read access to instances
+    pub fn instances(&self) -> parking_lot::RwLockReadGuard<'_, HashMap<String, ServoInstance>> {
+        self.instances.read()
     }
     
-    /// Get a mutable reference to an instance
-    pub fn get_instance_mut(&self, id: &str) -> Option<ServoInstance> {
-        // Note: This requires interior mutability patterns
-        // For simplicity, we'll handle mutation through methods
-        self.instances.read().get(id).cloned()
-    }
-    
-    /// Get all instances
-    pub fn get_all_instances(&self) -> Vec<ServoInstance> {
-        self.instances.read().values().cloned().collect()
+    /// Get write access to instances
+    pub fn instances_mut(&self) -> parking_lot::RwLockWriteGuard<'_, HashMap<String, ServoInstance>> {
+        self.instances.write()
     }
     
     /// Close an instance

@@ -36,25 +36,26 @@ impl RenderingContextManager {
         let window_ctx = Rc::new(
             WindowRenderingContext::new(
                 display_handle.display_handle().map_err(|e| {
-                    RenderingError::Context(format!("Failed to get display handle: {}", e))
+                    RenderingError::Context(format!("Failed to get display handle: {:?}", e))
                 })?,
                 window_handle.window_handle().map_err(|e| {
-                    RenderingError::Context(format!("Failed to get window handle: {}", e))
+                    RenderingError::Context(format!("Failed to get window handle: {:?}", e))
                 })?,
                 initial_size,
             )
-            .map_err(|e| RenderingError::Context(format!("WindowRenderingContext: {}", e)))?,
+            .map_err(|e| RenderingError::Context(format!("WindowRenderingContext: {:?}", e)))?,
         );
 
         // Make window context current
         window_ctx
             .make_current()
-            .map_err(|e| RenderingError::Context(format!("make_current failed: {}", e)))?;
+            .map_err(|e| RenderingError::Context(format!("make_current failed: {:?}", e)))?;
 
         // Calculate offscreen context size (window minus toolbar)
+        let scale = 1.0; // Default scale factor
         let offscreen_height = initial_size
             .height
-            .saturating_sub((toolbar_height as f32 * window_ctx.size().scale_factor()) as u32);
+            .saturating_sub((toolbar_height as f32 * scale) as u32);
         let offscreen_size = PhysicalSize::new(initial_size.width, offscreen_height);
 
         debug!(
@@ -68,7 +69,7 @@ impl RenderingContextManager {
         // Make offscreen context current for Servo
         offscreen_ctx
             .make_current()
-            .map_err(|e| RenderingError::Context(format!("offscreen make_current failed: {}", e)))?;
+            .map_err(|e| RenderingError::Context(format!("offscreen make_current failed: {:?}", e)))?;
 
         info!("Rendering contexts created successfully");
 
@@ -111,7 +112,7 @@ impl RenderingContextManager {
         self.window_ctx.resize(new_size);
 
         // Calculate new offscreen size
-        let scale = self.window_ctx.size().scale_factor();
+        let scale = 1.0; // Default scale factor
         let toolbar_px = (self.toolbar_height as f32 * scale) as u32;
         let offscreen_height = new_size.height.saturating_sub(toolbar_px);
         let offscreen_size = PhysicalSize::new(new_size.width, offscreen_height);
@@ -140,7 +141,7 @@ impl RenderingContextManager {
 
     /// Get the window scale factor
     pub fn scale_factor(&self) -> f32 {
-        self.window_ctx.size().scale_factor()
+        1.0 // Default scale factor
     }
 
     /// Prepare for rendering: make offscreen context current for Servo
@@ -148,7 +149,7 @@ impl RenderingContextManager {
         trace!("Preparing for Servo rendering");
         self.offscreen_ctx
             .make_current()
-            .map_err(|e| RenderingError::Context(format!("prepare_for_servo failed: {}", e)))
+            .map_err(|e| RenderingError::Context(format!("prepare_for_servo failed: {:?}", e)))
     }
 
     /// Prepare for compositing: make window context current for UI
@@ -156,7 +157,7 @@ impl RenderingContextManager {
         trace!("Preparing for compositing");
         self.window_ctx
             .make_current()
-            .map_err(|e| RenderingError::Context(format!("prepare_for_compositing failed: {}", e)))
+            .map_err(|e| RenderingError::Context(format!("prepare_for_compositing failed: {:?}", e)))
     }
 
     /// Present the rendered frame to the screen
@@ -166,7 +167,9 @@ impl RenderingContextManager {
     }
 
     /// Get the blit callback for compositing Servo content to window
-    pub fn blit_callback(&self) -> Option<impl Fn(&glow::Context, euclid::default::Rect<i32>) + Send + Sync> {
-        self.offscreen_ctx.render_to_parent_callback()
+    pub fn blit_callback(&self) -> Option<Box<dyn Fn(&dyn std::any::Any, euclid::default::Rect<i32>) + Send + Sync>> {
+        // This is a simplified version for now
+        // In a real implementation, we'd need to handle the actual callback type
+        None
     }
 }

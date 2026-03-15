@@ -201,6 +201,14 @@ impl ErrorManager {
                 format!("Candle ML error: {}", candle_err),
                 ErrorCategory::Ai,
             ),
+            fenrir_core::error::FenrirError::EngineNotRunning => (
+                "Engine not running".to_string(),
+                ErrorCategory::Browser,
+            ),
+            fenrir_core::error::FenrirError::TabNotFound(uuid) => (
+                format!("Tab not found: {}", uuid),
+                ErrorCategory::Browser,
+            ),
         };
         
         let tags = vec!["fenrir-core"];

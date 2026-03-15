@@ -25,14 +25,14 @@ candle-nn = "0.9"
 candle-transformers = "0.9"
 
 # Tokenizer — SentencePiece support
-tokenizers = { version = "0.21" }
+tokenizers = { version = "0.22.2" }
 
 # Model Download von HuggingFace
-hf-hub = { version = "0.3", features = ["tokio"] }
+hf-hub = { version = "0.5.0", features = ["tokio"] }
 
 # Fortschrittsanzeige beim Download
-indicatif = "0.17"
-dirs = "5"
+indicatif = "0.18.4"
+dirs = "6.0.0"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

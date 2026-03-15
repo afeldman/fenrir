@@ -14,11 +14,13 @@ pub mod compositing;
 pub mod context;
 pub mod frame_control;
 pub mod webview;
+pub mod renderer;
 
 pub use compositing::CompositingEngine;
 pub use context::RenderingContextManager;
 pub use frame_control::{FrameRateController, RenderingState};
 pub use webview::{FenrirWebViewDelegate, WebViewManager};
+pub use renderer::{Renderer, DisplayList, WebRenderBackend};
 
 /// Error types for rendering operations
 #[derive(thiserror::Error, Debug)]
@@ -40,6 +42,9 @@ pub enum RenderingError {
     
     #[error("Frame callback error: {0}")]
     FrameCallback(String),
+    
+    #[error("Renderer error: {0}")]
+    Renderer(String),
 }
 
 /// Result type for rendering operations
@@ -50,5 +55,6 @@ pub mod prelude {
     pub use crate::{
         CompositingEngine, RenderingContextManager, RenderingError, RenderingResult,
         RenderingState, FrameRateController, FenrirWebViewDelegate, WebViewManager,
+        Renderer, DisplayList, WebRenderBackend,
     };
 }

@@ -1,4 +1,5 @@
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum FenrirError {
@@ -34,6 +35,12 @@ pub enum FenrirError {
 
     #[error("Candle ML error: {0}")]
     Candle(#[from] candle_core::Error),
+
+    #[error("Engine not running")]
+    EngineNotRunning,
+
+    #[error("Tab not found: {0}")]
+    TabNotFound(Uuid),
 }
 
 /// Kurzform für Result mit FenrirError.
@@ -80,6 +87,13 @@ mod tests {
 
         let io_error = FenrirError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"));
         assert!(format!("{}", io_error).contains("file not found"));
+
+        let engine_error = FenrirError::EngineNotRunning;
+        assert_eq!(format!("{}", engine_error), "Engine not running");
+
+        let tab_id = Uuid::new_v4();
+        let tab_error = FenrirError::TabNotFound(tab_id);
+        assert!(format!("{}", tab_error).contains(&tab_id.to_string()));
     }
 
     #[test]

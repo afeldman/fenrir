@@ -83,6 +83,13 @@ uuid = "1.22.0"
 # Tauri for desktop UI
 tauri = "2.0"
 
+# Geometry types (for rendering)
+euclid = "0.22"
+
+# Graphics and windowing
+glow = "0.13"
+winit = "0.30.13"
+
 servo           = { path = "../servo/components/servo" , package = "libservo", default-features = false, features = ["js_jit", "background_hang_monitor"] }
 paint_api       = { path = "../servo/components/shared/paint" , package = "servo-paint-api" }
 embedder_traits = { path = "../servo/components/shared/embedder" , package = "servo-embedder-traits" }

@@ -8,7 +8,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use egui_glow::EguiGlow;
-use egui_glow::glow::{self, HasContext};
 use euclid::Scale;
 use servo::{
     InputEvent, LoadStatus, MouseLeftViewportEvent, NavigationRequest, OffscreenRenderingContext,
@@ -148,16 +147,10 @@ impl BrowserState {
 
         state.servo.set_delegate(Rc::new(FenrirServoDelegate));
 
-        // WICHTIG: Stelle sicher, dass der Servo-Kontext current ist, bevor die WebView erstellt wird
+        // Servo-Kontext current setzen bevor WebView erstellt wird
         state.servo_ctx.make_current().expect("servo_ctx make_current vor WebView-Erstellung");
-        
-        // Debug: Überprüfe den Servo-Kontext
         trace!("Servo Context Größe: {:?}", state.servo_ctx.size());
-        
-        // WICHTIG: Servo braucht Zeit, um den Framebuffer zu initialisieren
-        // Wir geben Servo eine kurze Pause, bevor wir die WebView erstellen
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        
+
         let webview = WebViewBuilder::new(
             &state.servo,
             state.servo_ctx.clone() as Rc<dyn RenderingContext>,
@@ -168,13 +161,7 @@ impl BrowserState {
         .build();
 
         *state.webview.borrow_mut() = Some(webview);
-        
-        // WICHTIG: Nach der WebView-Erstellung Servo Zeit geben, um zu initialisieren
-        info!("WebView erstellt, warte auf Servo-Initialisierung...");
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        
-        // Jetzt einen Redraw anfordern
-        info!("Fordere initialen Redraw an...");
+        debug!("WebView erstellt, fordere initialen Redraw an");
         state.request_redraw();
         
         info!("Browser gestartet mit URL: {}", initial_url);
@@ -210,42 +197,28 @@ impl BrowserState {
     /// Compositing: Servo-Offscreen → Window, dann egui-Toolbar + Debug-Panel oben drauf.
     pub fn render(&self) {
         trace!("Beginne Render-Zyklus");
-        
-        // Offscreen-Kontext current setzen (Servo rendert dorthin),
-        // dann Window-Kontext für egui/blit vorbereiten — Reihenfolge wie in servoshell.
+
+        // 1. GL-Kontext current setzen (gemeinsamer CGL-Kontext für Servo + egui).
         self.servo_ctx.make_current().expect("servo_ctx make_current");
-        
-        // WICHTIG: Stelle sicher, dass der Framebuffer initialisiert ist
-        // Servo benötigt einen initialisierten Framebuffer, um darauf zu rendern
-        unsafe {
-            let gl = self.servo_ctx.glow_gl_api();
-            
-            // Framebuffer-Bindung überprüfen
-            let current_fbo = gl.get_parameter_i32(glow::FRAMEBUFFER_BINDING);
-            trace!("Aktueller Framebuffer vor Clear: {}", current_fbo);
-            
-            // Framebuffer-Status überprüfen
-            let status = gl.check_framebuffer_status(glow::FRAMEBUFFER);
-            trace!("Framebuffer Status vor Clear: {:?}", status);
-            
-            // Nur clearen, wenn der Framebuffer gültig ist
-            if status == glow::FRAMEBUFFER_COMPLETE {
-                gl.clear_color(1.0, 1.0, 1.0, 1.0); // Weißer Hintergrund
-                gl.clear(glow::COLOR_BUFFER_BIT);
-                trace!("Framebuffer erfolgreich geclert");
-            } else {
-                warn!("Framebuffer ist nicht komplett! Status: {:?}", status);
-                // Versuche, den Default-Framebuffer (0) zu binden
-                gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-                trace!("Default Framebuffer gebunden");
-            }
-            
-            let error = gl.get_error();
-            if error != glow::NO_ERROR {
-                warn!("OpenGL-Fehler nach Framebuffer-Initialisierung: {:?}", error);
-            }
+
+        // 2. WebView in den Offscreen-FBO rendern.
+        //    MUSS hier passieren: Intern ruft paint() prepare_for_rendering() auf und
+        //    lässt WebRender in den FBO compositen. Ohne diesen Call bleibt der FBO leer.
+        if let Some(wv) = self.webview.borrow().as_ref() {
+            wv.paint();
         }
-        
+
+        // 3. Blit-Callback holen — FBO ist jetzt befüllt.
+        type BlitFn = dyn Fn(&egui_glow::glow::Context, euclid::default::Rect<i32>) + Send + Sync;
+        let blit_callback: Option<Arc<BlitFn>> = self.servo_ctx
+            .render_to_parent_callback()
+            .map(|b| Arc::from(b) as Arc<BlitFn>);
+
+        if blit_callback.is_none() {
+            debug!("Kein Blit-Callback — render_to_parent_callback returned None");
+        }
+
+        // 4. Window-Context für Darstellung vorbereiten.
         self.window_ctx.prepare_for_rendering();
 
         let mut nav_url: Option<String> = None;
@@ -254,133 +227,52 @@ impl BrowserState {
         let mut nav_reload = false;
         let mut focus_url = false;
 
-        let servo_ctx = self.servo_ctx.clone();
         let mut egui = self.egui.borrow_mut();
 
         {
             let mut toolbar = self.toolbar.borrow_mut();
             let mut dbg = self.debug.borrow_mut();
-
-            // Box<dyn Fn> in Arc wrappen damit der Callback in egui-Closures geclont werden kann
-            type BlitFn = dyn Fn(&egui_glow::glow::Context, euclid::default::Rect<i32>) + Send + Sync;
-            
-            // Debug: Überprüfe den Framebuffer-Status
-            trace!("Vor render_to_parent_callback()");
-            let blit_callback: Option<Arc<BlitFn>> = servo_ctx
-                .render_to_parent_callback()
-                .map(|b| {
-                    trace!("render_to_parent_callback() gab einen Callback zurück!");
-                    Arc::from(b) as Arc<BlitFn>
-                });
-
-            info!("Beginne egui Frame");
+            let toolbar_height = self.config.ui.toolbar_height;
 
             egui.run(&self.window, |ctx| {
-                debug!("Egui-Frame gestartet");
-                debug!("Egui Context: {:?}", ctx);
-
+                // Servo-Inhalt im Hintergrund rendern (unter Toolbar und Debug-Panel).
                 if let Some(blit) = &blit_callback {
-                    let blit = blit.clone(); // Arc::clone — billig
-                    let screen = ctx.content_rect(); // Use content_rect instead of deprecated screen_rect
-                    
-                    // Sicherstellen, dass die Höhe nicht negativ ist
-                    let webview_height = (screen.height() - self.config.ui.toolbar_height).max(0.0);
-                    
+                    let blit = blit.clone();
+                    let screen = ctx.content_rect();
+                    let webview_height = (screen.height() - toolbar_height).max(0.0);
                     let webview_rect = egui::Rect::from_min_size(
-                        egui::pos2(0.0, self.config.ui.toolbar_height),
+                        egui::pos2(0.0, toolbar_height),
                         egui::vec2(screen.width(), webview_height),
                     );
-                    
-                    trace!("WebView Rect: {:?}", webview_rect);
-                    
-                    trace!("Erstelle Blit-Callback...");
-                    // Korrigierter Blit-Callback
-                    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("webview_blit"))).add(
-                        egui::PaintCallback {
-                            rect: webview_rect,
-                            callback: Arc::new(egui_glow::CallbackFn::new(
-                                move |info, painter| {
-                                    // Einfache Debug-Ausgabe in Datei schreiben
-                                    let _ = std::fs::write("/tmp/fenrir_callback_debug.txt", "Callback wird aufgerufen\n");
-
-                                    let clip = info.viewport_in_pixels();
-                                    
-                                    // Debug-Info in Datei schreiben
-                                    let debug_info = format!(
-                                        "Clip: left_px={}, from_bottom_px={}, width_px={}, height_px={}\n",
-                                        clip.left_px, clip.from_bottom_px, clip.width_px, clip.height_px
-                                    );
-                                    let _ = std::fs::write("/tmp/fenrir_clip_debug.txt", &debug_info);
-                                    
-                                    // Sicherstellen, dass die Koordinaten gültig sind
-                                    let x = clip.left_px.max(0);
-                                    let y = clip.from_bottom_px.max(0);
-                                    let width = clip.width_px.max(0);
-                                    let height = clip.height_px.max(0);
-                                    
-                                    // Target Rect mit validierten Werten erstellen
-                                    let target = euclid::default::Rect::new(
-                                        euclid::default::Point2D::new(x, y),
-                                        euclid::default::Size2D::new(width, height),
-                                    );
-                                    
-                                    // Debug: Target-Info speichern
-                                    let target_info = format!("Target: {:?}\n", target);
-                                    let _ = std::fs::write("/tmp/fenrir_target_debug.txt", &target_info);
-                                    
-                                    // Einfache Test-Zeichnung: Halbtransparentes Blau, damit Servo-Inhalte sichtbar sind
-                                    let gl = painter.gl();
-                                    unsafe {
-                                        // Scissor auf den Viewport setzen
-                                        gl.enable(glow::SCISSOR_TEST);
-                                        gl.scissor(x, y, width as i32, height as i32);
-                                        
-                                        // Halbtransparentes Blau zeichnen (50% transparent)
-                                        // Das lässt Servo-Inhalte durchscheinen, falls sie vorhanden sind
-                                        gl.clear_color(0.0, 0.0, 1.0, 0.5); // Halbtransparentes Blau
-                                        gl.clear(glow::COLOR_BUFFER_BIT);
-                                        
-                                        gl.disable(glow::SCISSOR_TEST);
-                                        
-                                        // OpenGL-Fehler überprüfen
-                                        let error = gl.get_error();
-                                        if error != glow::NO_ERROR {
-                                            let _ = std::fs::write("/tmp/fenrir_opengl_error.txt", format!("OpenGL-Fehler: {:?}\n", error));
-                                        }
-                                    }
-                                    
-                                    // Versuche den Blit (Servo's Inhalt auf den Bildschirm kopieren)
-                                    blit(painter.gl(), target);
-                                    let _ = std::fs::write("/tmp/fenrir_blit_success.txt", "Blit aufgerufen\n");
-                                },
-                            )),
-                        },
-                    );
-                } else {
-                    trace!("Kein Blit-Callback verfügbar - weißes Canvas");
+                    ctx.layer_painter(egui::LayerId::new(
+                        egui::Order::Background,
+                        egui::Id::new("webview_blit"),
+                    ))
+                    .add(egui::PaintCallback {
+                        rect: webview_rect,
+                        callback: Arc::new(egui_glow::CallbackFn::new(move |info, painter| {
+                            let clip = info.viewport_in_pixels();
+                            let target = euclid::default::Rect::new(
+                                euclid::default::Point2D::new(
+                                    clip.left_px.max(0),
+                                    clip.from_bottom_px.max(0),
+                                ),
+                                euclid::default::Size2D::new(
+                                    clip.width_px.max(0),
+                                    clip.height_px.max(0),
+                                ),
+                            );
+                            blit(painter.gl(), target);
+                        })),
+                    });
                 }
 
-                match toolbar::render(&mut toolbar, ctx, self.config.ui.toolbar_height) {
-                    ToolbarAction::Navigate(url) => {
-                        trace!("Toolbar Navigation: {}", url);
-                        nav_url = Some(url)
-                    },
-                    ToolbarAction::Back          => {
-                        trace!("Toolbar Back");
-                        nav_back = true
-                    },
-                    ToolbarAction::Forward       => {
-                        trace!("Toolbar Forward");
-                        nav_fwd = true
-                    },
-                    ToolbarAction::Reload        => {
-                        trace!("Toolbar Reload");
-                        nav_reload = true
-                    },
-                    ToolbarAction::FocusUrl      => {
-                        trace!("Toolbar Focus URL");
-                        focus_url = true
-                    },
+                match toolbar::render(&mut toolbar, ctx, toolbar_height) {
+                    ToolbarAction::Navigate(url) => nav_url = Some(url),
+                    ToolbarAction::Back          => nav_back = true,
+                    ToolbarAction::Forward       => nav_fwd = true,
+                    ToolbarAction::Reload        => nav_reload = true,
+                    ToolbarAction::FocusUrl      => focus_url = true,
                     ToolbarAction::None          => {}
                 }
 
@@ -388,34 +280,18 @@ impl BrowserState {
             });
         }
 
-        if focus_url { 
-            trace!("Fokussiere URL-Bar");
-            self.toolbar.borrow_mut().focus_url_bar(); 
-            // Wir müssen einen Redraw anfordern, damit die Toolbar neu gerendert wird
-            // und der Fokus gesetzt werden kann
+        if focus_url {
+            self.toolbar.borrow_mut().focus_url_bar();
             self.request_redraw();
         }
 
         egui.paint(&self.window);
         self.window_ctx.present();
-        trace!("Render abgeschlossen, präsentiert");
 
-        if let Some(url) = nav_url { 
-            trace!("Navigiere zu: {}", url);
-            self.navigate_string(url); 
-        }
-        if nav_back    { 
-            trace!("Gehe zurück");
-            self.go_back(); 
-        }
-        if nav_fwd     { 
-            trace!("Gehe vorwärts");
-            self.go_forward(); 
-        }
-        if nav_reload  { 
-            trace!("Lade neu");
-            self.reload(); 
-        }
+        if let Some(url) = nav_url { self.navigate_string(url); }
+        if nav_back    { self.go_back(); }
+        if nav_fwd     { self.go_forward(); }
+        if nav_reload  { self.reload(); }
     }
 
     pub fn spin(&self) {

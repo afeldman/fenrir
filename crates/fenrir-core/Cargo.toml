@@ -13,5 +13,8 @@ serde = { workspace = true }
 serde_json.workspace = true
 zeroize = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
 candle-core = "0.9"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

@@ -1,4 +1,6 @@
 use crate::error::FenrirResult;
+use std::future::Future;
+use std::pin::Pin;
 
 /// Alle Fenrir-Module implementieren diesen Trait.
 /// Ermöglicht einheitlichen Start/Stop-Lifecycle.
@@ -7,10 +9,10 @@ pub trait FenrirModule: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Modul hochfahren (async, kann fehlschlagen).
-    fn start(&self) -> impl std::future::Future<Output = FenrirResult<()>> + Send;
+    fn start(&self) -> Pin<Box<dyn Future<Output = FenrirResult<()>> + Send>>;
 
     /// Modul sauber herunterfahren.
-    fn stop(&self) -> impl std::future::Future<Output = ()> + Send;
+    fn stop(&self) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 
     /// Ist das Modul aktuell aktiv?
     fn is_running(&self) -> bool;
@@ -50,13 +52,19 @@ mod tests {
             "TestModule"
         }
 
-        async fn start(&self) -> FenrirResult<()> {
-            self.running.store(true, std::sync::atomic::Ordering::SeqCst);
-            Ok(())
+        fn start(&self) -> Pin<Box<dyn Future<Output = FenrirResult<()>> + Send>> {
+            let running = self.running.clone();
+            Box::pin(async move {
+                running.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            })
         }
 
-        async fn stop(&self) {
-            self.running.store(false, std::sync::atomic::Ordering::SeqCst);
+        fn stop(&self) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+            let running = self.running.clone();
+            Box::pin(async move {
+                running.store(false, std::sync::atomic::Ordering::SeqCst);
+            })
         }
 
         fn is_running(&self) -> bool {

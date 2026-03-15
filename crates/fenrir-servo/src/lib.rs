@@ -10,9 +10,11 @@
 
 mod delegate;
 mod waker;
+// mod servo_renderer; // Disabled due to Send/Sync issues with Servo API
 
 pub use delegate::FenrirServoDelegate;
 pub use waker::FenrirEventLoopWaker;
+// pub use servo_renderer::ServoRenderer;
 
 use fenrir_core::error::FenrirError;
 use fenrir_network::FenrirNetworkHandler;

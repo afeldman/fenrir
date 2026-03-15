@@ -50,7 +50,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             // lite.duckduckgo.com: reines HTML, kein JS-Framework, Servo-kompatibel
-            start_url: "https://duckduckgo.com".to_string(),
+            start_url: "https://lite.duckduckgo.com/lite".to_string(),
             window_width: 1280,
             window_height: 800,
             theme: Theme::System,
